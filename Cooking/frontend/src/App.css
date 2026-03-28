@@ -1,0 +1,52 @@
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: sans-serif;
+}
+
+.recipe-card {
+  background: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 10px;
+  text-align: left;
+}
+
+.recipe-title {
+  font-weight: bold;
+  font-size: 1.2rem;
+  cursor: pointer;
+  list-style: none; /* デフォルトの矢印を消す場合 */
+}
+
+.category {
+  font-size: 0.8rem;
+  color: #666;
+  margin-left: 10px;
+}
+
+.recipe-content {
+  margin-top: 15px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+pre {
+  white-space: pre-wrap;
+  background: #fff;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.refresh-button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
