@@ -9,4 +9,6 @@ dependencies = [
     "flask-cors>=6.0.2",
     "gunicorn>=25.3.0",
     "pandas>=3.0.1",
+    "cachetools>=5.5.0",
+    "requests>=2.32.0",
 ]
