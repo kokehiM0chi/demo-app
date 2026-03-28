@@ -83,3 +83,11 @@ uv pip compile pyproject.toml -o requirements.txt
 ## 📱 スマホでの利用
 
 Render にデプロイ後、発行された URL を iPhone の Safari で開き、**「ホーム画面に追加」** することで、ネイティブアプリのように利用可能です。
+
+## python library 更新
+
+### pyproject.toml を元に、本番環境用の requirements.txt を書き出す
+
+```bash
+uv pip compile pyproject.toml -o requirements.txt
+```
