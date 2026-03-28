@@ -8,16 +8,27 @@ function App() {
   // Python APIからデータを取得する関数
   const fetchRecipes = async () => {
     try {
-      const response = await fetch('http://localhost:54321/api/recipes');
+      setLoading(true); // 再取得する場合のために明示的にセット
+
+      const API_URL = "https://recipe-api-gotu.onrender.com";
+
+      // 1. サーバーにリクエストを送る
+      const response = await fetch(`${API_URL}/api/recipes`);
+
+      // 2. レスポンスを JSON 形式として解析する
       const data = await response.json();
+
+      // 3. 取得したデータを状態（State）に保存する
       setRecipes(data);
-      setLoading(false);
+
     } catch (error) {
       console.error("APIの取得に失敗しました:", error);
+    } finally {
+      // 成功しても失敗してもローディングを終了する
       setLoading(false);
     }
   };
-
+  
   // コンポーネントがマウントされた時に実行
   useEffect(() => {
     fetchRecipes();
