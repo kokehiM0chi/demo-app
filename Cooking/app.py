@@ -5,9 +5,11 @@ import os
 import logging
 import sys
 from cachetools import TTLCache
+from config import Config
 
 app = Flask(__name__)
-CORS(app)
+# CORSの許可ドメインをConfigから取得
+CORS(app, resources={r"/api/*": {"origins": Config.FRONTEND_URL}})
 
 # --- ログ設定の強化 ---
 # Renderなどの環境で即座に出力されるよう、StreamHandlerを明示的に設定
@@ -19,11 +21,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 12時間キャッシュ
-cache = TTLCache(maxsize=1, ttl=43200)
+# キャッシュ時間もConfigから取得
+cache = TTLCache(maxsize=1, ttl=Config.CACHE_TTL)
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtQT_N7fhV5opDRkTin8EfZ9D6xbB6uHR5siCpryF7tfEy2rFoLbtXgE6o4xsyOXooRVm9WETZAuIV/pub?output=csv"
-
-@app.route('/api/recipes')
+@app.route('/api/recipes', strict_slashes=False)
 def get_recipes():
     if "recipe_data" in cache:
         logger.info("Cache hit. Returning cached data.")
@@ -32,7 +33,7 @@ def get_recipes():
     logger.info("START: Fetching data from Google Sheets...")
     try:
         # スプレッドシート読み込み
-        df = pd.read_csv(CSV_URL)
+        df = pd.read_csv(Config.CSV_URL)
         recipes = df.fillna('').to_dict(orient='records')
 
         # キャッシュに保存
@@ -44,7 +45,7 @@ def get_recipes():
         logger.error(f"Fetch failed: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/recipes/clear')
+@app.route('/api/recipes/clear', strict_slashes=False)
 def clear_cache():
     cache.clear()
     logger.info("ACTION: Cache cleared by manual request.")
@@ -52,5 +53,5 @@ def clear_cache():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 54321))
-    logger.info(f"Server starting on port {port}...")
-    app.run(host='0.0.0.0', port=port, debug=True)
+    logger.info(Config.STARTUP_MSG)
+    app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)

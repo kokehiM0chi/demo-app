@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import './App.css'
+import { Config } from './config'; // パスは環境に合わせて調整してください
 
 function App() {
   const [recipes, setRecipes] = useState([]);
@@ -14,7 +15,7 @@ function App() {
         setLoading(true);
       }
 
-      const API_URL = "https://recipe-api-gotu.onrender.com";
+      const API_URL = Config.API_BASE_URL;
 
       // 1. サーバーにリクエストを送る
       const response = await fetch(`${API_URL}/api/recipes`);
@@ -36,7 +37,7 @@ function App() {
   const handleRefresh = async () => {
     try {
       // 画面全体を「読み込み中」にせず、裏側で処理を開始
-      const API_URL = "https://recipe-api-gotu.onrender.com";
+      const API_URL = Config.API_BASE_URL;
 
       // 1. まずサーバー側のキャッシュを消す命令を送る
       await fetch(`${API_URL}/api/recipes/clear`);
