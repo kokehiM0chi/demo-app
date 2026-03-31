@@ -3,7 +3,15 @@ import './App.css'
 import { Config } from './config'; // パスは環境に合わせて調整してください
 
 function App() {
-  const [recipes, setRecipes] = useState([]);
+  const CACHE_KEY = 'my_cooking_cache'; // 保存庫の鍵の名前
+
+  // 【変更1】初期値を「保存庫」から読み出す
+  const [recipes, setRecipes] = useState(() => {
+    const saved = localStorage.getItem(CACHE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+
   const [loading, setLoading] = useState(false);
 
   // Python APIからデータを取得する関数
@@ -23,8 +31,9 @@ function App() {
       // 2. レスポンスを JSON 形式として解析する
       const data = await response.json();
 
-      // 3. 取得したデータを状態（State）に保存する
+      // 【変更2】取得したデータを状態に保存し、同時に「保存庫」にも書き込む
       setRecipes(data);
+      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
 
     } catch (error) {
       console.error("APIの取得に失敗しました:", error);
@@ -60,8 +69,10 @@ function App() {
   return (
     <div className="container">
       <h1>🍳 My Cooking Book</h1>
-      <p className="subtitle">スプレッドシートから同期中</p>
-
+      {/* 【変更3】データがある時は「同期中」を出さない、または控えめにする */}
+      <p className="subtitle">
+        {loading && recipes.length === 0 ? "スプレッドシートから同期中..." : "最新のレシピを表示中"}
+      </p>
       {/* recipesが空、かつloading中の時（初回のみ）表示 */}
       {loading && recipes.length === 0 ? (
         <p>読み込み中...</p>
