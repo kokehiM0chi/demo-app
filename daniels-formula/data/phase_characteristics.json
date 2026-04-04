@@ -1,0 +1,40 @@
+{
+  "phase_rules": {
+    "Phase_I": {
+      "main_focus": "E-Running / Foundation",
+      "q_sessions": [],
+      "supplements": ["WS (10-15s) if weeks >= 3", "Resistance Training", "Dynamic Stretching"],
+      "long_run": "L-Run (25-30% of weekly mileage)",
+      "description": "ほとんどがEランニング。怪我予防と土台作り。"
+    },
+    "Phase_II": {
+      "main_focus": "R-Training (Speed)",
+      "new_stress": "Speed only",
+      "q_sessions": [
+        {"type": "R", "frequency_per_week": 2, "min_rest_days": 2}
+      ],
+      "long_run": "Continue L-Run",
+      "description": "スピードへの適応。Iトレの前にスピードのストレスを解消しておく。"
+    },
+    "Phase_III": {
+      "main_focus": "I-Training (Aerobic Capacity)",
+      "new_stress": "Aerobic Power (VO2max)",
+      "q_sessions": [
+        {"type": "I", "frequency_per_week": 2, "target": "Long distance focus"},
+        {"type": "R", "frequency_per_week": "optional", "note": "Maintain speed"}
+      ],
+      "long_run": "Continue L-Run (Weekly)",
+      "description": "最もきつい核心期。有酸素能力を最大化させる。"
+    },
+    "Phase_IV": {
+      "main_focus": "T-Training (Threshold / Sharpness)",
+      "new_stress": "Reduced overall stress for racing",
+      "q_sessions": [
+        {"type": "T", "frequency_per_week": 1},
+        {"type": "R", "note": "200m x 4-6 after T-run for sharpness"}
+      ],
+      "long_run": "1 per week (including races)",
+      "description": "調整期。Tトレ中心に切り替え、レースに向けたキレを出す。"
+    }
+  }
+}
