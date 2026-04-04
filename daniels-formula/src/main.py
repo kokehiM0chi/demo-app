@@ -37,6 +37,8 @@ class DanielsFormulaEngine:
             self.chars = json.load(f)
         with open(self.base_path / "data/user_stats.json", "r") as f:
             self.stats = json.load(f)
+        with open(self.base_path / "data/training_schedule_rules.json", "r") as f:
+            self.schedule_rules = json.load(f)
 
     def time_to_seconds(self, time_str):
         parts = str(time_str).split(':')
@@ -91,12 +93,48 @@ class DanielsFormulaEngine:
             char = self.chars["phase_rules"][phase_id]
             for _ in range(weeks):
                 menus = [self.calculate_menu_details(q["type"], self.stats["weekly_mileage"]) for q in char["q_sessions"]]
+                weekly_schedule = self.generate_weekly_schedule(
+                    menus=menus,
+                    l_run_max=l_run_max,
+                    has_weekend_race=False
+                )
                 plan.append({
                     "week": week_count, "phase": phase_id, "vdot": v_row['Vdot'],
-                    "focus": char["main_focus"], "menus": menus, "l_run_max": l_run_max
+                    "focus": char["main_focus"], "menus": menus, "l_run_max": l_run_max,
+                    "weekly_schedule": weekly_schedule
                 })
                 week_count += 1
         return plan, pace_summary
+
+    def generate_weekly_schedule(self, menus, l_run_max, has_weekend_race=False):
+        profile_key = "with_weekend_race" if has_weekend_race else "no_weekend_race"
+        rule = self.schedule_rules["weekly_training_rules"][profile_key]
+
+        default_easy = rule.get("default_easy_label", "E-Run / Recovery")
+        day_plan = {day: default_easy for day in range(1, 8)}
+        q_days = rule.get("q_day_slots", [])
+
+        for idx, menu in enumerate(menus):
+            day = q_days[idx] if idx < len(q_days) else None
+            if day is None or day not in day_plan:
+                continue
+            day_plan[day] = f"Q{idx + 1}: {menu}"
+
+        if has_weekend_race:
+            race_day = rule.get("race_day", 7)
+            race_label = rule.get("race_label", "Race (Weekend)")
+            if race_day in day_plan:
+                day_plan[race_day] = race_label
+        else:
+            long_run_day = rule.get("long_run_day", 7)
+            l_run_label = f"L-Run: max {l_run_max}km"
+            if long_run_day in day_plan:
+                if day_plan[long_run_day].startswith("Q"):
+                    day_plan[long_run_day] = f"{day_plan[long_run_day]} / {l_run_label}"
+                else:
+                    day_plan[long_run_day] = l_run_label
+
+        return [f"Day {day}: {day_plan[day]}" for day in range(1, 8)]
 
     def calculate_menu_details(self, q_type, weekly_mileage):
         if q_type == "R":
@@ -137,6 +175,7 @@ def export_to_html(plan, pace_summary, stats):
     rows = ""
     for w in plan:
         q_sessions_html = "".join([f"<div style='margin-bottom: 3px;'>・{m}</div>" for m in w['menus']])
+        weekly_schedule_html = "".join([f"<div style='margin-bottom: 3px;'>- {d}</div>" for d in w.get('weekly_schedule', [])])
         p_style = PHASE_COLORS.get(w['phase'], {"bg": "#ffffff", "text": "#333", "label": "不明"})
 
         rows += f"""
@@ -157,6 +196,10 @@ def export_to_html(plan, pace_summary, stats):
                 <div>
                     <span style="background:{MENU_THEMES['Q']['bg']}; color:{MENU_THEMES['Q']['color']}; padding:2px 6px; border-radius:4px; font-size:0.75em; font-weight:bold; margin-right:8px; border:1px solid {MENU_THEMES['Q']['color']};">Q</span>
                     <div style="margin-top:5px; padding-left:5px; color:{MENU_THEMES['Q']['color']}; font-size:0.95em; font-weight:bold;">{q_sessions_html if w['menus'] else 'E-Runのみ'}</div>
+                </div>
+                <div style="margin-top:10px; border-top:1px dashed rgba(0,0,0,0.1); padding-top:8px;">
+                    <span style="font-size:0.75em; font-weight:bold; color:#2c3e50;">Day Plan (Rule Based)</span>
+                    <div style="margin-top:5px; color:#444; font-size:0.82em; line-height:1.4;">{weekly_schedule_html}</div>
                 </div>
             </td>
         </tr>"""
@@ -187,7 +230,7 @@ def export_to_html(plan, pace_summary, stats):
                 <div style="background:{MENU_THEMES['Q']['bg']}; border-top:4px solid {MENU_THEMES['Q']['color']}; padding:10px; font-size:0.8em; border-radius:0 0 4px 4px;">
                     <strong style="color:{MENU_THEMES['Q']['color']};">{MENU_THEMES['Q']['label']}</strong><br>
                     <strong>目的:</strong> 強度別の走力向上(T/I/R)<br>
-                    <strong>Note:</strong> 鮮度の高い脚で挑むことで、トレーニング効果を最大化させます。
+                    <strong>Note:</strong> 鮮度の高い脚で挑むことで、トレーニング効果を最大化させます。週末レースがない週はQ1・Q2・Q3を2日目・4日目・7日目に配置します。
                 </div>
             </div>
 

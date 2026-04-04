@@ -1,0 +1,22 @@
+{
+    "weekly_training_rules": {
+        "no_weekend_race": {
+            "q_day_slots": [
+                2,
+                4,
+                7
+            ],
+            "long_run_day": 7,
+            "default_easy_label": "E-Run / Recovery"
+        },
+        "with_weekend_race": {
+            "q_day_slots": [
+                2,
+                4
+            ],
+            "race_day": 7,
+            "race_label": "Race (Weekend)",
+            "default_easy_label": "E-Run / Recovery"
+        }
+    }
+}
