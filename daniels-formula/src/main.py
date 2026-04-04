@@ -4,12 +4,19 @@ import webbrowser
 from pathlib import Path
 from datetime import timedelta
 
-# フェーズごとの配色設定
+# フェーズごとの配色（背景用：非常に淡いパステルカラー）
 PHASE_COLORS = {
-    "Phase_I":   {"bg": "#e3f2fd", "text": "#1565c0", "label": "基礎構築"},
-    "Phase_II":  {"bg": "#fff3e0", "text": "#e65100", "label": "導入期"},
-    "Phase_III": {"bg": "#ffebee", "text": "#c62828", "label": "最大負荷"},
-    "Phase_IV":  {"bg": "#f3e5f5", "text": "#6a1b9a", "label": "調整・レース"}
+    "Phase_I":   {"bg": "#f0f7ff", "text": "#0056b3", "label": "基礎構築"},
+    "Phase_II":  {"bg": "#fff9f0", "text": "#9a6300", "label": "導入期"},
+    "Phase_III": {"bg": "#fff5f5", "text": "#b91c1c", "label": "最大負荷"},
+    "Phase_IV":  {"bg": "#faf5ff", "text": "#6b21a8", "label": "調整・レース"}
+}
+
+# トレーニング種別ごとの配色（右二つを水色・オレンジ系に調整）
+MENU_THEMES = {
+    "E": {"color": "#1b4332", "bg": "#d8f3dc", "label": "E (Easy Run)"},
+    "L": {"color": "#0077b6", "bg": "#caf0f8", "label": "L (Long Run)"},  # 水色系
+    "Q": {"color": "#e67e22", "bg": "#fef5e7", "label": "Q (Quality Sessions)"} # オレンジ系
 }
 
 class DanielsConstants:
@@ -21,7 +28,6 @@ class DanielsConstants:
 
 class DanielsFormulaEngine:
     def __init__(self):
-        # 実行環境に合わせてパスを調整してください
         self.base_path = Path(__file__).parent.parent
         self.vdot_df = pd.read_csv(self.base_path / "data/vdot_table.csv")
 
@@ -105,7 +111,7 @@ class DanielsFormulaEngine:
         return "E-Run"
 
 def export_to_html(plan, pace_summary, stats):
-    # パス表示用コンテナ
+    # パースサマリー
     pace_html = f"""
     <div class="pace-container" style="display: flex; gap: 10px; margin-bottom: 20px;">
         <div style="flex:1; background:#2c3e50; color:white; padding:12px; border-radius:8px; text-align:center;">
@@ -121,8 +127,8 @@ def export_to_html(plan, pace_summary, stats):
             <span style="font-size:1.1em;">{pace_summary['R_400']}</span><span style="font-size:0.8em;"> / </span>
             <span style="font-size:1.1em;">{pace_summary['R_200']}</span>
         </div>
-        <div style="flex:1; background:#27ae60; color:white; padding:12px; border-radius:8px; text-align:center; border: 2px solid #2ecc71;">
-            <strong style="font-size:0.75em; color: #d1f2eb;">E Pace Guide (Upper)</strong><br>
+        <div style="flex:1; background:#ffffff; color:{MENU_THEMES['E']['color']}; padding:12px; border-radius:8px; text-align:center; border: 2px solid {MENU_THEMES['E']['color']};">
+            <strong style="font-size:0.75em; opacity:0.8;">E Pace Guide (Upper)</strong><br>
             <span style="font-size:1.1em; font-weight:bold;">{pace_summary['E_limit']}</span><span style="font-size:0.8em;"> /km</span>
         </div>
     </div>
@@ -131,28 +137,26 @@ def export_to_html(plan, pace_summary, stats):
     rows = ""
     for w in plan:
         q_sessions_html = "".join([f"<div style='margin-bottom: 3px;'>・{m}</div>" for m in w['menus']])
-
-        # フェーズごとのスタイル取得
-        style = PHASE_COLORS.get(w['phase'], {"bg": "#ffffff", "text": "#333", "label": "不明"})
+        p_style = PHASE_COLORS.get(w['phase'], {"bg": "#ffffff", "text": "#333", "label": "不明"})
 
         rows += f"""
-        <tr style="background:{style['bg']};">
+        <tr style="background:{p_style['bg']};">
             <td style="padding:15px; border:1px solid #ddd; text-align:center; font-weight:bold;">{w['week']}</td>
             <td style="padding:15px; border:1px solid #ddd;">
-                <span style="background:{style['text']}; color:white; padding:3px 8px; border-radius:12px; font-size:0.8em; font-weight:bold; display:block; text-align:center; margin-bottom:4px;">
+                <span style="background:{p_style['text']}; color:white; padding:3px 8px; border-radius:12px; font-size:0.8em; font-weight:bold; display:block; text-align:center; margin-bottom:4px;">
                     {w['phase']}
                 </span>
-                <div style="text-align:center; font-size:0.75em; color:{style['text']}; font-weight:bold;">{style['label']}</div>
+                <div style="text-align:center; font-size:0.75em; color:{p_style['text']}; font-weight:bold;">{p_style['label']}</div>
             </td>
             <td style="padding:15px; border:1px solid #ddd; font-size:0.85em; color:#444;">{w['focus']}</td>
             <td style="padding:15px; border:1px solid #ddd;">
                 <div style="margin-bottom:10px; border-bottom:1px dashed rgba(0,0,0,0.1); padding-bottom:8px;">
-                    <span style="background:rgba(39, 174, 96, 0.15); color:#27ae60; padding:2px 6px; border-radius:4px; font-size:0.75em; font-weight:bold; margin-right:8px;">L (Long Run)</span>
+                    <span style="background:{MENU_THEMES['L']['bg']}; color:{MENU_THEMES['L']['color']}; padding:2px 6px; border-radius:4px; font-size:0.75em; font-weight:bold; margin-right:8px; border:1px solid {MENU_THEMES['L']['color']};">L</span>
                     <strong style="color:#2c3e50;">最大 {w['l_run_max']} km</strong>
                 </div>
                 <div>
-                    <span style="background:rgba(192, 57, 43, 0.15); color:#c0392b; padding:2px 6px; border-radius:4px; font-size:0.75em; font-weight:bold; margin-right:8px;">Q (Quality Sessions)</span>
-                    <div style="margin-top:5px; padding-left:5px; color:#c0392b; font-size:0.95em;">{q_sessions_html if w['menus'] else 'E-Runのみ'}</div>
+                    <span style="background:{MENU_THEMES['Q']['bg']}; color:{MENU_THEMES['Q']['color']}; padding:2px 6px; border-radius:4px; font-size:0.75em; font-weight:bold; margin-right:8px; border:1px solid {MENU_THEMES['Q']['color']};">Q</span>
+                    <div style="margin-top:5px; padding-left:5px; color:{MENU_THEMES['Q']['color']}; font-size:0.95em; font-weight:bold;">{q_sessions_html if w['menus'] else 'E-Runのみ'}</div>
                 </div>
             </td>
         </tr>"""
@@ -169,9 +173,27 @@ def export_to_html(plan, pace_summary, stats):
                 <div style="font-size:0.8em; background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:4px;">Weekly Mileage: {stats['weekly_mileage']}km</div>
             </div>
 
-            <table style="border-collapse:collapse; width:100%; table-layout: fixed; border-radius:0 0 8px 8px; overflow:hidden;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0;">
+                <div style="background:{MENU_THEMES['E']['bg']}; border-top:4px solid {MENU_THEMES['E']['color']}; padding:10px; font-size:0.8em; border-radius:0 0 4px 4px;">
+                    <strong style="color:{MENU_THEMES['E']['color']};">{MENU_THEMES['E']['label']}</strong><br>
+                    <strong>目的:</strong> 心筋強化・回復・基礎作り<br>
+                    <strong>Note:</strong> 指定ペースを「超えない」余裕を持つことで、翌日のQセッションへ活力を繋げます。
+                </div>
+                <div style="background:{MENU_THEMES['L']['bg']}; border-top:4px solid {MENU_THEMES['L']['color']}; padding:10px; font-size:0.8em; border-radius:0 0 4px 4px;">
+                    <strong style="color:{MENU_THEMES['L']['color']};">{MENU_THEMES['L']['label']}</strong><br>
+                    <strong>目的:</strong> 持久力の向上・脂質代謝改善<br>
+                    <strong>Note:</strong> 週の走行距離の25-30%を目安に、リズム良く走り切る力を養います。
+                </div>
+                <div style="background:{MENU_THEMES['Q']['bg']}; border-top:4px solid {MENU_THEMES['Q']['color']}; padding:10px; font-size:0.8em; border-radius:0 0 4px 4px;">
+                    <strong style="color:{MENU_THEMES['Q']['color']};">{MENU_THEMES['Q']['label']}</strong><br>
+                    <strong>目的:</strong> 強度別の走力向上(T/I/R)<br>
+                    <strong>Note:</strong> 鮮度の高い脚で挑むことで、トレーニング効果を最大化させます。
+                </div>
+            </div>
+
+            <table style="border-collapse:collapse; width:100%; table-layout: fixed; border: 1px solid #ddd;">
                 <thead>
-                    <tr style="background:#eee;">
+                    <tr style="background:#f2f2f2;">
                         <th style="width: 8%; padding:12px; text-align:left; border:1px solid #ddd;">週</th>
                         <th style="width: 15%; padding:12px; text-align:left; border:1px solid #ddd;">フェーズ</th>
                         <th style="width: 20%; padding:12px; text-align:left; border:1px solid #ddd;">今週の目的</th>
@@ -183,12 +205,16 @@ def export_to_html(plan, pace_summary, stats):
         </div>
     </body></html>"""
 
-    output_path = Path("daniels_color_coded.html").absolute()
+    output_path = Path("daniels_custom_color_plan.html").absolute()
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
     webbrowser.open(f"file://{output_path}")
 
 if __name__ == "__main__":
-    engine = DanielsFormulaEngine()
-    plan, paces = engine.generate_plan(24)
-    export_to_html(plan, paces, engine.stats)
+    try:
+        engine = DanielsFormulaEngine()
+        plan, paces = engine.generate_plan(24)
+        export_to_html(plan, paces, engine.stats)
+        print("HTMLプランの作成が完了しました。")
+    except Exception as e:
+        print(f"エラーが発生しました: {e}")
