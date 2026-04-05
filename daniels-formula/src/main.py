@@ -55,28 +55,43 @@ class DanielsFormulaEngine:
         dist = self.stats["base_distance"]
         time = self.stats["base_time"]
         return self.vdot_df.loc[self.vdot_df[dist] <= time].iloc[0]
-
     def calculate_paces(self, v_row):
-        try:
-            sec_5k = self.time_to_seconds(v_row['5km'])
-            i_pace_sec = sec_5k / 5
-            sec_10k = self.time_to_seconds(v_row['10km'])
-            t_pace_sec = (sec_10k / 10) * 1.07
-            e_limit_sec = t_pace_sec * DanielsConstants.E_LIMIT_RATIO
-            sec_1500 = self.time_to_seconds(v_row['1.5km'])
-            r_base_per_m = sec_1500 / 1500
-            r_400_sec = (r_base_per_m * 400) * 0.95
-            r_200_sec = r_400_sec / 2
+            try:
+                # 入力された基準が 5km か 10km かを判定して基準ペース(秒/km)を出す
+                if self.stats["base_distance"] == "5km":
+                    base_sec_per_km = self.time_to_seconds(v_row['5km']) / 5
+                else:
+                    base_sec_per_km = self.time_to_seconds(v_row['10km']) / 10
 
-            return {
-                "T": self.seconds_to_str(t_pace_sec),
-                "I": self.seconds_to_str(i_pace_sec),
-                "R_400": self.seconds_to_str(r_400_sec),
-                "R_200": self.seconds_to_str(r_200_sec),
-                "E_limit": self.seconds_to_str(e_limit_sec)
-            }
-        except Exception:
-            return {"T": "N/A", "I": "N/A", "R_400": "N/A", "R_200": "N/A", "E_limit": "N/A"}
+                # 1. Tペース (閾値): 10kmペースの約1.022倍 (VDOT 44で4:43を狙う)
+                # 5kmペースから計算する場合は 約1.06倍
+                if self.stats["base_distance"] == "10km":
+                    t_pace_sec = base_sec_per_km * 1.022
+                else:
+                    t_pace_sec = base_sec_per_km * 1.06
+
+                # 2. Iペース (インターバル): 5kmのレースペースそのもの
+                i_pace_sec = self.time_to_seconds(v_row['5km']) / 5
+
+                # 3. Rペース (レペティション):
+                # 200mはTペース(秒/km)の約16.5%、400mはその2倍
+                # VDOT 44: T(283秒) * 0.165 = 46.7秒 (約47秒)
+                r_200_sec = t_pace_sec * 0.166
+                r_400_sec = r_200_sec * 2
+
+                # 4. Eペース上限: Tペースの約1.25倍
+                e_limit_sec = t_pace_sec * 1.25
+
+                return {
+                    "T": self.seconds_to_str(t_pace_sec),
+                    "I": self.seconds_to_str(i_pace_sec),
+                    "R_400": self.seconds_to_str(r_400_sec),
+                    "R_200": self.seconds_to_str(r_200_sec),
+                    "E_limit": self.seconds_to_str(e_limit_sec)
+                }
+            except Exception as e:
+                print(f"Pace calculation error: {e}")
+                return {"T": "N/A", "I": "N/A", "R_400": "N/A", "R_200": "N/A", "E_limit": "N/A"}
 
     def generate_plan(self, target_weeks):
         v_row = self.get_vdot_row()
