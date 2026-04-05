@@ -10,7 +10,7 @@ class DanielsConstants:
     L_RUN_MAX_RATIO = 0.30
     I_RUN_MAX_RATIO = 0.08
     R_RUN_MAX_RATIO = 0.05
-    E_LIMIT_RATIO = 1.22
+    E_LIMIT_RATIO = 1.25  # Tペースの約1.25倍
 
 
 class DanielsFormulaEngine:
@@ -49,50 +49,44 @@ class DanielsFormulaEngine:
         return self.vdot_df.loc[self.vdot_df[dist] <= time].iloc[0]
 
     def calculate_paces(self, v_row):
-        """
-        VDOTテーブルから直接ペースを取得し、Daniels公式に基づいて計算
-        テーブルカラム: 1.5km, 5km, 10km, ハーフ, フル
-        """
-        try:
-            # テーブルから各距離のペース（秒/km）を取得
-            pace_1500m_sec_per_km = self.time_to_seconds(v_row['1.5km']) / 1.5
-            pace_5km_sec_per_km = self.time_to_seconds(v_row['5km']) / 5
-            pace_10km_sec_per_km = self.time_to_seconds(v_row['10km']) / 10
-            pace_half_sec_per_km = self.time_to_seconds(v_row['ハーフ']) / 21.0975
-            pace_full_sec_per_km = self.time_to_seconds(v_row['フル']) / 42.195
+            """
+            VDOTテーブルから、ダニエルズ第4版の定義に基づき正確に算出。
+            T: 30-40分維持可能な心地よいきつさ (p.103)
+            I: 5kmレースペース (p.119)
+            R: 1500mペース付近 (p.135)
+            """
+            try:
+                # 各レースのベストペース（秒/km）を算出
+                pace_1500m_sec_per_km = self.time_to_seconds(v_row['1.5km']) / 1.5
+                pace_5km_sec_per_km = self.time_to_seconds(v_row['5km']) / 5
+                pace_10km_sec_per_km = self.time_to_seconds(v_row['10km']) / 10
 
-            # Daniels公式に基づくペース計算
+                # 1. T-Pace: 10kmペースより約2.2%遅い (VDOT 44で4:43)
+                t_pace_sec = pace_10km_sec_per_km * 1.022
 
-            # 1. E-Pace (Easy): エイジグループ別の推奨ペース
-            #    フルマラソンペースの約45～55秒遅いペース（またはフルペース×1.48-1.55）
-            e_limit_sec = pace_full_sec_per_km * 1.50  # 保守的な上限
+                # 2. I-Pace: 5kmペースそのもの (VDOT 44で4:27)
+                i_pace_sec = pace_5km_sec_per_km * 1.00
 
-            # 2. T-Pace (Threshold/Tempo): 乳酸閾値ペース
-            #    通常は10kmペースの約104～108%、またはハーフペースの約98～100%
-            #    ここではハーフペースを基準に約104%
-            t_pace_sec = pace_half_sec_per_km * 1.04
+                # 3. R-Pace: 1.5kmペースの約 1.015倍（VDOT 51で400m 86秒 / 200m 43秒に一致）
+                # VDOT 44の場合: (363s / 1.5) * 1.015 = 245.6s/km -> 400m 98.2s / 200m 49.1s
+                # ※書籍のVDOT 44のR設定は 200m 47秒なので、1.5kmペースそのものでも良い
+                r_pace_sec_per_km = pace_1500m_sec_per_km * 1.00 # ここではシンプルに1500mペースを適用
+                r_400_sec = (r_pace_sec_per_km / 1000) * 400
+                r_200_sec = r_400_sec / 2
 
-            # 3. I-Pace (Interval/VO2max): 最大酸素摂取量領域
-            #    5kmペースの約88～92%（約3～8分間のインターバル）
-            i_pace_sec = pace_5km_sec_per_km * 0.90
+                # 4. E-Pace: Tペースの約1.25倍
+                e_limit_sec = t_pace_sec * 1.25
 
-            # 4. R-Pace (Repetition): 短距離レペティション
-            #    1500m～3000mペース領域。1500mペースから計算
-            #    400m: 1500mペースの約93～95%
-            #    200m: 400mペースの約50～52%
-            r_400_sec = pace_1500m_sec_per_km * 0.94
-            r_200_sec = r_400_sec * 0.51
-
-            return {
-                "T": self.seconds_to_str(t_pace_sec),
-                "I": self.seconds_to_str(i_pace_sec),
-                "R_400": self.seconds_to_str(r_400_sec),
-                "R_200": self.seconds_to_str(r_200_sec),
-                "E_limit": self.seconds_to_str(e_limit_sec)
-            }
-        except Exception as e:
-            print(f"Pace calculation error: {e}")
-            return {"T": "N/A", "I": "N/A", "R_400": "N/A", "R_200": "N/A", "E_limit": "N/A"}
+                return {
+                    "T": self.seconds_to_str(t_pace_sec),
+                    "I": self.seconds_to_str(i_pace_sec),
+                    "R_400": self.seconds_to_str(r_400_sec),
+                    "R_200": self.seconds_to_str(r_200_sec),
+                    "E_limit": self.seconds_to_str(e_limit_sec)
+                }
+            except Exception as e:
+                print(f"Pace calculation error: {e}")
+                return {"T": "N/A", "I": "N/A", "R_400": "N/A", "R_200": "N/A", "E_limit": "N/A"}
 
     def generate_plan(self, target_weeks):
         """目標週数のトレーニングプランを生成"""
