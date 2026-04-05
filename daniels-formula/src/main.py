@@ -1,8 +1,7 @@
 import webbrowser
 from pathlib import Path
-from daniels_engine import DanielsConstants, DanielsFormulaEngine
+from daniels_engine import DanielsFormulaEngine
 
-# フェーズごとの配色（背景用：非常に淡いパステルカラー）
 PHASE_COLORS = {
     "Phase_I":   {"bg": "#f0f7ff", "text": "#0056b3", "label": "基礎構築"},
     "Phase_II":  {"bg": "#fff9f0", "text": "#9a6300", "label": "導入期"},
@@ -10,50 +9,45 @@ PHASE_COLORS = {
     "Phase_IV":  {"bg": "#faf5ff", "text": "#6b21a8", "label": "調整・レース"}
 }
 
-# トレーニング種別ごとの配色（右二つを水色・オレンジ系に調整）
 MENU_THEMES = {
     "E": {"color": "#1b4332", "bg": "#d8f3dc", "label": "E (Easy Run)"},
-    "L": {"color": "#0077b6", "bg": "#caf0f8", "label": "L (Long Run)"},  # 水色系
-    "Q": {"color": "#e67e22", "bg": "#fef5e7", "label": "Q (Quality Sessions)"} # オレンジ系
+    "L": {"color": "#0077b6", "bg": "#caf0f8", "label": "L (Long Run)"},
+    "Q": {"color": "#e67e22", "bg": "#fef5e7", "label": "Q (Quality Sessions)"}
 }
 
-def export_to_html(plan, pace_summary, stats):
-    # パースサマリー
+def export_to_html(plan, paces, details_db, stats):
     pace_html = f"""
     <div class="pace-container" style="display: flex; gap: 10px; margin-bottom: 20px;">
         <div style="flex:1; background:#2c3e50; color:white; padding:12px; border-radius:8px; text-align:center;">
             <strong style="font-size:0.75em; opacity:0.8;">T Pace (閾値)</strong><br>
-            <span style="font-size:1.1em;">{pace_summary['T']}</span><span style="font-size:0.8em;"> /km</span>
+            <span style="font-size:1.1em;">{paces['T']}</span><span style="font-size:0.8em;"> /km</span>
         </div>
         <div style="flex:1; background:#2c3e50; color:white; padding:12px; border-radius:8px; text-align:center;">
             <strong style="font-size:0.75em; opacity:0.8;">I Pace (インターバル)</strong><br>
-            <span style="font-size:1.1em;">{pace_summary['I']}</span><span style="font-size:0.8em;"> /km</span>
+            <span style="font-size:1.1em;">{paces['I']}</span><span style="font-size:0.8em;"> /km</span>
         </div>
         <div style="flex:1; background:#2c3e50; color:white; padding:12px; border-radius:8px; text-align:center;">
             <strong style="font-size:0.75em; opacity:0.8;">R (400m / 200m)</strong><br>
-            <span style="font-size:1.1em;">{pace_summary['R_400']}</span><span style="font-size:0.8em;"> / </span>
-            <span style="font-size:1.1em;">{pace_summary['R_200']}</span>
+            <span style="font-size:1.1em;">{paces['R_400']}</span> / <span style="font-size:1.1em;">{paces['R_200']}</span>
         </div>
         <div style="flex:1; background:#ffffff; color:{MENU_THEMES['E']['color']}; padding:12px; border-radius:8px; text-align:center; border: 2px solid {MENU_THEMES['E']['color']};">
             <strong style="font-size:0.75em; opacity:0.8;">E Pace Guide (Upper)</strong><br>
-            <span style="font-size:1.1em; font-weight:bold;">{pace_summary['E_limit']}</span><span style="font-size:0.8em;"> /km</span>
+            <span style="font-size:1.1em; font-weight:bold;">{paces['E_limit']}</span><span style="font-size:0.8em;"> /km</span>
         </div>
     </div>
     """
 
     rows = ""
     for w in plan:
-        q_sessions_html = "".join([f"<div style='margin-bottom: 3px;'>・{m}</div>" for m in w['menus']])
-        weekly_schedule_html = "".join([f"<div style='margin-bottom: 3px;'>- {d}</div>" for d in w.get('weekly_schedule', [])])
-        p_style = PHASE_COLORS.get(w['phase'], {"bg": "#ffffff", "text": "#333", "label": "不明"})
+        q_html = "".join([f"<div style='margin-bottom:3px;'>・<a href='#{m['id']}' style='color:inherit; font-weight:bold;'>{m['summary']}</a></div>" for m in w['menus']])
+        sched_html = "".join([f"<div style='margin-bottom:3px;'>- {d}</div>" for d in w['weekly_schedule']])
+        p_style = PHASE_COLORS.get(w['phase'])
 
         rows += f"""
         <tr style="background:{p_style['bg']};">
             <td style="padding:15px; border:1px solid #ddd; text-align:center; font-weight:bold;">{w['week']}</td>
             <td style="padding:15px; border:1px solid #ddd;">
-                <span style="background:{p_style['text']}; color:white; padding:3px 8px; border-radius:12px; font-size:0.8em; font-weight:bold; display:block; text-align:center; margin-bottom:4px;">
-                    {w['phase']}
-                </span>
+                <span style="background:{p_style['text']}; color:white; padding:3px 8px; border-radius:12px; font-size:0.8em; font-weight:bold; display:block; text-align:center; margin-bottom:4px;">{w['phase']}</span>
                 <div style="text-align:center; font-size:0.75em; color:{p_style['text']}; font-weight:bold;">{p_style['label']}</div>
             </td>
             <td style="padding:15px; border:1px solid #ddd; font-size:0.85em; color:#444;">{w['focus']}</td>
@@ -64,22 +58,31 @@ def export_to_html(plan, pace_summary, stats):
                 </div>
                 <div>
                     <span style="background:{MENU_THEMES['Q']['bg']}; color:{MENU_THEMES['Q']['color']}; padding:2px 6px; border-radius:4px; font-size:0.75em; font-weight:bold; margin-right:8px; border:1px solid {MENU_THEMES['Q']['color']};">Q</span>
-                    <div style="margin-top:5px; padding-left:5px; color:{MENU_THEMES['Q']['color']}; font-size:0.95em; font-weight:bold;">{q_sessions_html if w['menus'] else 'E-Runのみ'}</div>
+                    <div style="margin-top:5px; padding-left:5px; color:{MENU_THEMES['Q']['color']}; font-size:0.95em; font-weight:bold;">{q_html if w['menus'] else 'E-Runのみ'}</div>
                 </div>
                 <div style="margin-top:10px; border-top:1px dashed rgba(0,0,0,0.1); padding-top:8px;">
-                    <span style="font-size:0.75em; font-weight:bold; color:#2c3e50;">Day Plan (Rule Based)</span>
-                    <div style="margin-top:5px; color:#444; font-size:0.82em; line-height:1.4;">{weekly_schedule_html}</div>
+                    <div style="margin-top:5px; color:#444; font-size:0.82em; line-height:1.4;">{sched_html}</div>
                 </div>
             </td>
         </tr>"""
 
-    html = f"""
-    <html>
-    <head><meta charset="UTF-8"></head>
-    <body style="font-family:-apple-system, sans-serif; padding:30px; background:#f4f7f6; color:#333; line-height:1.5;">
+    detail_html = "".join([f"""
+    <div id="{qid}" style="margin-bottom:15px; padding:15px; border-radius:8px; background:#fff; border-left:6px solid {MENU_THEMES['Q']['color']}; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+        <h4 style="margin:0 0 10px 0; color:#2c3e50;">{qid}: {d['type']}</h4>
+        <div style="font-size:0.9em; display:grid; grid-template-columns: 100px 1fr; gap:5px;">
+            <strong>メニュー:</strong> <span>{d['sets']}</span>
+            <strong>ペース:</strong> <span style="color:#b91c1c; font-weight:bold;">{d['pace']}</span>
+            <strong>休息:</strong> <span>{d['rest']}</span>
+            <strong>備考:</strong> <span style="font-style:italic; color:#666;">{d['note']}</span>
+        </div>
+        <div style="text-align:right; margin-top:8px;"><a href="#" style="font-size:0.75em; color:#3498db;">↑ スケジュールに戻る</a></div>
+    </div>""" for qid, d in details_db.items()])
+
+    final_html = f"""
+    <html><head><meta charset="UTF-8"></head>
+    <body style="font-family:sans-serif; padding:30px; background:#f4f7f6; color:#333;">
         <div style="max-width:1000px; margin:0 auto; background:white; padding:25px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1);">
             {pace_html}
-
             <div style="background:#34495e; color:white; padding:15px; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;">
                 <h2 style="margin:0; font-size:1.4em;">Daniels 24-Week Plan (VDOT: {plan[0]['vdot']})</h2>
                 <div style="font-size:0.8em; background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:4px;">Weekly Mileage: {stats['weekly_mileage']}km</div>
@@ -103,30 +106,26 @@ def export_to_html(plan, pace_summary, stats):
                 </div>
             </div>
 
-            <table style="border-collapse:collapse; width:100%; table-layout: fixed; border: 1px solid #ddd;">
-                <thead>
-                    <tr style="background:#f2f2f2;">
-                        <th style="width: 8%; padding:12px; text-align:left; border:1px solid #ddd;">週</th>
-                        <th style="width: 15%; padding:12px; text-align:left; border:1px solid #ddd;">フェーズ</th>
-                        <th style="width: 20%; padding:12px; text-align:left; border:1px solid #ddd;">今週の目的</th>
-                        <th style="width: 57%; padding:12px; text-align:left; border:1px solid #ddd;">トレーニング構成 (L / Q)</th>
-                    </tr>
-                </thead>
+            <table style="border-collapse:collapse; width:100%; border: 1px solid #ddd;">
+                <thead><tr style="background:#f2f2f2;">
+                    <th style="width:8%; padding:12px; text-align:left; border:1px solid #ddd;">週</th>
+                    <th style="width:15%; padding:12px; text-align:left; border:1px solid #ddd;">フェーズ</th>
+                    <th style="width:20%; padding:12px; text-align:left; border:1px solid #ddd;">今週の目的</th>
+                    <th style="width:57%; padding:12px; text-align:left; border:1px solid #ddd;">トレーニング構成 (L / Q)</th>
+                </tr></thead>
                 <tbody>{rows}</tbody>
             </table>
+
+            <h3 style="margin-top:40px; border-bottom:2px solid #34495e; padding-bottom:10px;">Qセッション詳細リファレンス</h3>
+            {detail_html}
         </div>
     </body></html>"""
 
-    output_path = Path("daniels_custom_color_plan.html").absolute()
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(html)
-    webbrowser.open(f"file://{output_path}")
+    out = Path("daniels_detail_plan.html").absolute()
+    with open(out, "w", encoding="utf-8") as f: f.write(final_html)
+    webbrowser.open(f"file://{out}")
 
 if __name__ == "__main__":
-    try:
-        engine = DanielsFormulaEngine()
-        plan, paces = engine.generate_plan(24)
-        export_to_html(plan, paces, engine.stats)
-        print("HTMLプランの作成が完了しました。")
-    except Exception as e:
-        print(f"エラーが発生しました: {e}")
+    engine = DanielsFormulaEngine()
+    plan, paces, details = engine.generate_plan(24)
+    export_to_html(plan, paces, details, engine.stats)
