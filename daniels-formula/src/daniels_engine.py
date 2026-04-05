@@ -49,32 +49,39 @@ class DanielsFormulaEngine:
         return self.vdot_df.loc[self.vdot_df[dist] <= time].iloc[0]
 
     def calculate_paces(self, v_row):
-        """VDOTから T/I/R/E ペースを計算"""
+        """
+        VDOTテーブルから直接ペースを取得し、Daniels公式に基づいて計算
+        テーブルカラム: 1.5km, 5km, 10km, ハーフ, フル
+        """
         try:
-            # 入力された基準が 5km か 10km かを判定して基準ペース(秒/km)を出す
-            if self.stats["base_distance"] == "5km":
-                base_sec_per_km = self.time_to_seconds(v_row['5km']) / 5
-            else:
-                base_sec_per_km = self.time_to_seconds(v_row['10km']) / 10
+            # テーブルから各距離のペース（秒/km）を取得
+            pace_1500m_sec_per_km = self.time_to_seconds(v_row['1.5km']) / 1.5
+            pace_5km_sec_per_km = self.time_to_seconds(v_row['5km']) / 5
+            pace_10km_sec_per_km = self.time_to_seconds(v_row['10km']) / 10
+            pace_half_sec_per_km = self.time_to_seconds(v_row['ハーフ']) / 21.0975
+            pace_full_sec_per_km = self.time_to_seconds(v_row['フル']) / 42.195
 
-            # 1. Tペース (閾値): 10kmペースの約1.022倍 (VDOT 44で4:43を狙う)
-            # 5kmペースから計算する場合は 約1.06倍
-            if self.stats["base_distance"] == "10km":
-                t_pace_sec = base_sec_per_km * 1.022
-            else:
-                t_pace_sec = base_sec_per_km * 1.06
+            # Daniels公式に基づくペース計算
 
-            # 2. Iペース (インターバル): 5kmのレースペースそのもの
-            i_pace_sec = self.time_to_seconds(v_row['5km']) / 5
+            # 1. E-Pace (Easy): エイジグループ別の推奨ペース
+            #    フルマラソンペースの約45～55秒遅いペース（またはフルペース×1.48-1.55）
+            e_limit_sec = pace_full_sec_per_km * 1.50  # 保守的な上限
 
-            # 3. Rペース (レペティション):
-            # 200mはTペース(秒/km)の約16.5%、400mはその2倍
-            # VDOT 44: T(283秒) * 0.165 = 46.7秒 (約47秒)
-            r_200_sec = t_pace_sec * 0.166
-            r_400_sec = r_200_sec * 2
+            # 2. T-Pace (Threshold/Tempo): 乳酸閾値ペース
+            #    通常は10kmペースの約104～108%、またはハーフペースの約98～100%
+            #    ここではハーフペースを基準に約104%
+            t_pace_sec = pace_half_sec_per_km * 1.04
 
-            # 4. Eペース上限: Tペースの約1.25倍
-            e_limit_sec = t_pace_sec * 1.25
+            # 3. I-Pace (Interval/VO2max): 最大酸素摂取量領域
+            #    5kmペースの約88～92%（約3～8分間のインターバル）
+            i_pace_sec = pace_5km_sec_per_km * 0.90
+
+            # 4. R-Pace (Repetition): 短距離レペティション
+            #    1500m～3000mペース領域。1500mペースから計算
+            #    400m: 1500mペースの約93～95%
+            #    200m: 400mペースの約50～52%
+            r_400_sec = pace_1500m_sec_per_km * 0.94
+            r_200_sec = r_400_sec * 0.51
 
             return {
                 "T": self.seconds_to_str(t_pace_sec),
