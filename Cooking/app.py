@@ -6,6 +6,10 @@ import logging
 import sys
 from cachetools import TTLCache
 from config import Config
+import pandas as pd
+from flask import Flask, jsonify, request
+from sentence_transformers import SentenceTransformer, util
+import torch
 
 app = Flask(__name__)
 # CORSの許可ドメインをConfigから取得
@@ -44,42 +48,42 @@ def get_recipes():
 @app.route('/api/search', strict_slashes=False)
 def search_recipes():
     category = request.args.get('category', '')
-    query = request.args.get('q', '').lower()
-
-    # --- 同義語マッピングの定義 ---
-    # ユーザーが「スイーツ」を選んだ時、内部的に「デザート」「焼き菓子」「ケーキ」等もヒットさせる
-    synonyms = {
-        "スイーツ": ["デザート", "焼き菓子", "菓子", "ケーキ", "パフェ"],
-        "肉": ["牛肉", "豚肉", "鶏肉", "ミンチ"],
-    }
+    query = request.args.get('q', '')
 
     if "recipe_data" not in cache:
         get_recipes()
     all_recipes = cache.get("recipe_data", [])
 
-    filtered = []
-    for r in all_recipes:
-        cat_value = str(r.get('カテゴリ', ''))
-        name_value = str(r.get('料理名', '')).lower()
+    # レシピごとに「意味」を計算するための文章を作成
+    # 例：「[カテゴリ] 料理名 材料」という文字列にする
+    recipe_texts = [
+        f"[{r.get('カテゴリ', '')}] {r.get('料理名', '')} {r.get('材料', '')}"
+        for r in all_recipes
+    ]
 
-        # カテゴリ検索のロジック強化
-        match_cat = False
-        if not category or category == "すべて":
-            match_cat = True
-        elif category == "スイーツ":
-            # スイーツを選んだ場合、同義語のどれかがカテゴリに含まれていればOK
-            search_targets = synonyms.get("スイーツ", []) + ["スイーツ"]
-            match_cat = any(target in cat_value for target in search_targets)
-        else:
-            match_cat = category in cat_value
+    # 2. レシピ群をベクトル化（キャッシュしておくとより高速ですが、まずはシンプルに）
+    recipe_embeddings = model.encode(recipe_texts, convert_to_tensor=True)
 
-        # キーワード検索
-        match_query = not query or query in name_value
+    # 3. 検索ワード（または選択されたカテゴリ）をベクトル化
+    search_target = f"{category} {query}".strip()
+    search_embedding = model.encode(search_target, convert_to_tensor=True)
 
-        if match_cat and match_query:
-            filtered.append(r)
+    # 4. 類似度（コサイン類似度）を計算
+    # 0.0 〜 1.0 で数値が出て、高いほど「意味が近い」
+    cosine_scores = util.cos_sim(search_embedding, recipe_embeddings)[0]
 
-    return jsonify(filtered)
+    # 5. スコアをレシピデータに付与して、スコア順にソート
+    results = []
+    for i, r in enumerate(all_recipes):
+        r_with_score = r.copy()
+        r_with_score['score'] = float(cosine_scores[i])
+        results.append(r_with_score)
+
+    # スコアが高い順（似ている順）に並び替え
+    # 閾値を設けて（例: 0.4以上）絞り込むことも可能
+    sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
+
+    return jsonify(sorted_results)
 
 @app.route('/api/recipes/clear', strict_slashes=False)
 def clear_cache():
