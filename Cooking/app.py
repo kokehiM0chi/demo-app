@@ -1,5 +1,5 @@
 import pandas as pd
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
 import logging
@@ -26,24 +26,48 @@ cache = TTLCache(maxsize=1, ttl=Config.CACHE_TTL)
 
 @app.route('/api/recipes', strict_slashes=False)
 def get_recipes():
-    if "recipe_data" in cache:
-        logger.info("Cache hit. Returning cached data.")
-        return jsonify(cache["recipe_data"])
-
-    logger.info("START: Fetching data from Google Sheets...")
+    """全件取得用エンドポイント"""
     try:
-        # スプレッドシート読み込み
-        df = pd.read_csv(Config.CSV_URL)
-        recipes = df.fillna('').to_dict(orient='records')
+        if "recipe_data" in cache:
+            all_recipes = cache["recipe_data"]
+        else:
+            df = pd.read_csv(Config.CSV_URL)
+            all_recipes = df.fillna('').to_dict(orient='records')
+            cache["recipe_data"] = all_recipes
+            logger.info("Fetched all recipes and cached.")
 
-        # キャッシュに保存
-        cache["recipe_data"] = recipes
-
-        logger.info(f"SUCCESS: Data fetched and cached. Total recipes: {len(recipes)}")
-        return jsonify(recipes)
+        return jsonify(all_recipes)
     except Exception as e:
-        logger.error(f"Fetch failed: {str(e)}")
+        logger.error(f"Error in get_recipes: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/search', strict_slashes=False)
+def search_recipes():
+    """絞り込み専用エンドポイント"""
+    category = request.args.get('category', '')
+    query = request.args.get('q', '').lower()
+
+    if "recipe_data" not in cache:
+        # キャッシュがない場合は一度全件取得を走らせる
+        get_recipes()
+
+    all_recipes = cache.get("recipe_data", [])
+
+    filtered = []
+    for r in all_recipes:
+        # 「カテゴリ」列をチェック
+        cat_value = str(r.get('カテゴリ', ''))
+        name_value = str(r.get('料理名', '')).lower()
+
+        # カテゴリフィルタ（「すべて」以外が指定されている場合）
+        match_cat = not category or category == "すべて" or category in cat_value
+        # キーワード検索
+        match_query = not query or query in name_value
+
+        if match_cat and match_query:
+            filtered.append(r)
+
+    return jsonify(filtered)
 
 @app.route('/api/recipes/clear', strict_slashes=False)
 def clear_cache():

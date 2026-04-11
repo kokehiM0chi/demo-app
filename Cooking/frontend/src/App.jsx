@@ -1,106 +1,115 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import './App.css'
-import { Config } from './config'; // パスは環境に合わせて調整してください
+import { Config } from './config';
 
 function App() {
-  const CACHE_KEY = 'my_cooking_cache'; // 保存庫の鍵の名前
+  const CACHE_KEY = 'my_cooking_cache';
 
-  // 【変更1】初期値を「保存庫」から読み出す
+  // 初期値：キャッシュ読み込みを安全に
   const [recipes, setRecipes] = useState(() => {
-    const saved = localStorage.getItem(CACHE_KEY);
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem(CACHE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
   });
 
-
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("すべて");
 
-  // Python APIからデータを取得する関数
-  // isSilent が true の場合は画面に「読み込み中...」を出さない
-  const fetchRecipes = async (isSilent = false) => {
+  // カテゴリ選択肢
+  const categories = ["すべて", "肉", "魚", "野菜", "デザート", "主食"];
+
+  // データ取得
+  const fetchRecipes = useCallback(async (isSilent = false) => {
     try {
-      // レシピがまだ無い（初回）かつサイレント指定がない時だけローディングを表示
-      if (recipes.length === 0 && !isSilent) {
-        setLoading(true);
-      }
+      if (recipes.length === 0 && !isSilent) setLoading(true);
+      const API_URL = Config?.API_BASE_URL || "http://localhost:54321";
 
-      const API_URL = Config.API_BASE_URL;
-
-      // 1. サーバーにリクエストを送る
       const response = await fetch(`${API_URL}/api/recipes`);
+      if (!response.ok) throw new Error("Server response was not ok");
 
-      // 2. レスポンスを JSON 形式として解析する
       const data = await response.json();
-
-      // 【変更2】取得したデータを状態に保存し、同時に「保存庫」にも書き込む
-      setRecipes(data);
-      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-
+      if (Array.isArray(data)) {
+        setRecipes(data);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+      }
     } catch (error) {
-      console.error("APIの取得に失敗しました:", error);
+      console.error("API Fetch Error:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [recipes.length]);
 
-  // 「データを更新する」ボタンが押された時の処理
-  const handleRefresh = async () => {
-    try {
-      // 画面全体を「読み込み中」にせず、裏側で処理を開始
-      const API_URL = Config.API_BASE_URL;
-
-      // 1. まずサーバー側のキャッシュを消す命令を送る
-      await fetch(`${API_URL}/api/recipes/clear`);
-
-      // 2. 最新データを取得し直す（サイレントモードをtrueにする）
-      await fetchRecipes(true);
-
-      alert("最新のデータを取得しました！");
-    } catch (error) {
-      console.error("更新に失敗しました:", error);
-      alert("更新に失敗しました。");
-    }
-  };
-
-  // コンポーネントがマウントされた時に実行
   useEffect(() => {
     fetchRecipes();
-  }, []);
+  }, [fetchRecipes]);
+
+  // フィルタリング（ヌルチェックを強化）
+  const filteredRecipes = useMemo(() => {
+    if (!Array.isArray(recipes)) return [];
+
+    return recipes.filter(recipe => {
+      if (!recipe) return false;
+
+      // キー名はスプレッドシートの1行目に合わせる必要があります
+      const rName = String(recipe["料理名"] || "");
+      const rCat = String(recipe["カテゴリ"] || "");
+
+      const categoryMatch = selectedCategory === "すべて" || rCat.includes(selectedCategory);
+      const searchMatch = searchQuery === "" || rName.toLowerCase().includes(searchQuery.toLowerCase());
+
+      return categoryMatch && searchMatch;
+    });
+  }, [recipes, searchQuery, selectedCategory]);
 
   return (
     <div className="container">
       <h1>🍳 My Cooking Book</h1>
-      {/* 【変更3】データがある時は「同期中」を出さない、または控えめにする */}
-      <p className="subtitle">
-        {loading && recipes.length === 0 ? "スプレッドシートから同期中..." : "最新のレシピを表示中"}
-      </p>
-      {/* recipesが空、かつloading中の時（初回のみ）表示 */}
-      {loading && recipes.length === 0 ? (
-        <p>読み込み中...</p>
-      ) : (
-        <div className="recipe-list">
-          {recipes.map((recipe, index) => (
+
+      <div className="search-controls">
+        <input
+          type="text"
+          placeholder="料理名で検索..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="search-input"
+        />
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="category-select"
+        >
+          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+        </select>
+      </div>
+
+      <div className="recipe-list">
+        {loading && filteredRecipes.length === 0 ? (
+          <p style={{textAlign: "center"}}>読み込み中...</p>
+        ) : filteredRecipes.length > 0 ? (
+          filteredRecipes.map((recipe, index) => (
             <details key={index} className="recipe-card">
               <summary className="recipe-title">
-                {recipe.料理名} <span className="category">[{recipe.カテゴリ}]</span>
+                {recipe["料理名"] || "名称未設定"}
+                <span className="category">[{recipe["カテゴリ"] || "未分類"}]</span>
               </summary>
               <div className="recipe-content">
                 <h4>■ 材料</h4>
-                <pre>{recipe.材料}</pre>
+                <pre>{recipe["材料"] || "データなし"}</pre>
                 <h4>■ 工程</h4>
-                <pre>{recipe.工程}</pre>
-                {recipe['コツ・メモ'] && (
-                  <div className="memo">
-                    <strong>💡 コツ・メモ:</strong>
-                    <p>{recipe['コツ・メモ']}</p>
-                  </div>
-                )}
+                <pre>{recipe["工程"] || "データなし"}</pre>
               </div>
             </details>
-          ))}
-        </div>
-      )}
+          ))
+        ) : (
+          <p style={{textAlign: "center", padding: "20px"}}>
+            レシピが見つかりません。
+          </p>
+        )}
+      </div>
 
-      <button onClick={handleRefresh} className="refresh-button">
+      <button onClick={() => fetchRecipes(false)} className="refresh-button">
         最新の情報に更新
       </button>
     </div>
