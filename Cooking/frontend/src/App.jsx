@@ -17,9 +17,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("すべて");
 
-  // カテゴリ選択肢
-  const categories = ["すべて", "肉", "魚", "野菜", "デザート", "主食"];
-
+  // 分類名のリストを修正
+  const categories = ["すべて", "肉", "魚", "野菜", "スイーツ", "主食"];
   // データ取得
   const fetchRecipes = useCallback(async (isSilent = false) => {
     try {
@@ -45,20 +44,25 @@ function App() {
     fetchRecipes();
   }, [fetchRecipes]);
 
-  // フィルタリング（ヌルチェックを強化）
+  // useMemo 内のフィルタリングロジックも Python側と合わせる（またはAPIに任せる）
   const filteredRecipes = useMemo(() => {
-    if (!Array.isArray(recipes)) return [];
-
+    if (!recipes) return [];
     return recipes.filter(recipe => {
-      if (!recipe) return false;
+      const rCat = recipe["カテゴリ"] || "";
+      const rName = recipe["料理名"] || "";
 
-      // キー名はスプレッドシートの1行目に合わせる必要があります
-      const rName = String(recipe["料理名"] || "");
-      const rCat = String(recipe["カテゴリ"] || "");
+      let categoryMatch = false;
+      if (selectedCategory === "すべて") {
+        categoryMatch = true;
+      } else if (selectedCategory === "スイーツ") {
+        // フロントエンド側でも「スイーツ」の中に「デザート」等を含める判定を入れる
+        const targets = ["スイーツ", "デザート", "焼き菓子", "お菓子"];
+        categoryMatch = targets.some(target => rCat.includes(target));
+      } else {
+        categoryMatch = rCat.includes(selectedCategory);
+      }
 
-      const categoryMatch = selectedCategory === "すべて" || rCat.includes(selectedCategory);
       const searchMatch = searchQuery === "" || rName.toLowerCase().includes(searchQuery.toLowerCase());
-
       return categoryMatch && searchMatch;
     });
   }, [recipes, searchQuery, selectedCategory]);

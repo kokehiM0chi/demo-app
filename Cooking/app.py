@@ -43,24 +43,36 @@ def get_recipes():
 
 @app.route('/api/search', strict_slashes=False)
 def search_recipes():
-    """絞り込み専用エンドポイント"""
     category = request.args.get('category', '')
     query = request.args.get('q', '').lower()
 
-    if "recipe_data" not in cache:
-        # キャッシュがない場合は一度全件取得を走らせる
-        get_recipes()
+    # --- 同義語マッピングの定義 ---
+    # ユーザーが「スイーツ」を選んだ時、内部的に「デザート」「焼き菓子」「ケーキ」等もヒットさせる
+    synonyms = {
+        "スイーツ": ["デザート", "焼き菓子", "菓子", "ケーキ", "パフェ"],
+        "肉": ["牛肉", "豚肉", "鶏肉", "ミンチ"],
+    }
 
+    if "recipe_data" not in cache:
+        get_recipes()
     all_recipes = cache.get("recipe_data", [])
 
     filtered = []
     for r in all_recipes:
-        # 「カテゴリ」列をチェック
         cat_value = str(r.get('カテゴリ', ''))
         name_value = str(r.get('料理名', '')).lower()
 
-        # カテゴリフィルタ（「すべて」以外が指定されている場合）
-        match_cat = not category or category == "すべて" or category in cat_value
+        # カテゴリ検索のロジック強化
+        match_cat = False
+        if not category or category == "すべて":
+            match_cat = True
+        elif category == "スイーツ":
+            # スイーツを選んだ場合、同義語のどれかがカテゴリに含まれていればOK
+            search_targets = synonyms.get("スイーツ", []) + ["スイーツ"]
+            match_cat = any(target in cat_value for target in search_targets)
+        else:
+            match_cat = category in cat_value
+
         # キーワード検索
         match_query = not query or query in name_value
 
