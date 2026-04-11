@@ -114,8 +114,6 @@ scipy==1.17.1
     # via
     #   scikit-learn
     #   sentence-transformers
-sentence-transformers==5.4.0
-    # via cooking (pyproject.toml)
 setuptools==81.0.0
     # via torch
 shellingham==1.5.4
@@ -128,10 +126,6 @@ threadpoolctl==3.6.0
     # via scikit-learn
 tokenizers==0.22.2
     # via transformers
-torch==2.11.0
-    # via
-    #   cooking (pyproject.toml)
-    #   sentence-transformers
 tqdm==4.67.3
     # via
     #   huggingface-hub
@@ -154,3 +148,11 @@ werkzeug==3.1.3
     # via
     #   flask
     #   flask-cors
+
+# --- 依存関係のコアを軽量版に指定 ---
+# sentence-transformers は安定版を使用
+sentence-transformers==3.4.1
+# transformers は安定版を使用
+transformers==4.48.0
+# torch は CPU版を明示的に指定（これでビルドが通ります）
+torch==2.5.1+cpu

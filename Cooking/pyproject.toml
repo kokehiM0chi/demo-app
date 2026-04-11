@@ -15,3 +15,13 @@ dependencies = [
     "sentence-transformers>=3.4.1",
     "torch>=2.5.1",
 ]
+
+# uvを使う場合、CPU版のインデックスを教えてあげる必要があります
+# ここから下を追加
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
