@@ -88,6 +88,7 @@ function App() {
         </select>
       </div>
 
+{/* --- ここから差し替え --- */}
       <div className="recipe-list">
         {loading && filteredRecipes.length === 0 ? (
           <p style={{textAlign: "center"}}>読み込み中...</p>
@@ -100,20 +101,36 @@ function App() {
               </summary>
 
               <div className="recipe-content">
-                {/* 作成者情報の表示 */}
+                {/* 1. 【追加】サムネイル表示エリア */}
+                {recipe["Video_ID"] && (
+                  <div className="thumbnail-container">
+                    <a href={recipe["URL"]} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={`https://img.youtube.com/vi/${recipe["Video_ID"]}/mqdefault.jpg`}
+                        alt={recipe["料理名"]}
+                        className="recipe-thumbnail"
+                        loading="lazy"
+                      />
+                      <div className="play-overlay">▶ 動画を再生</div>
+                    </a>
+                  </div>
+                )}
+
+                {/* 2. 【追加】作成者情報の表示 */}
                 {recipe["作成者"] && (
                   <div className="creator-tag">
                     👤 <strong>作成者:</strong> {recipe["作成者"]}
                   </div>
                 )}
 
-                {/* コンテキスト（料理の背景）の表示 */}
+                {/* 3. 【追加】コンテキスト（料理の背景）の表示 */}
                 {recipe["コンテキスト"] && (
                   <div className="context-box">
                     💡 <em>{recipe["コンテキスト"]}</em>
                   </div>
                 )}
 
+                {/* 4. 【既存】材料と工程のレイアウト */}
                 <div className="recipe-details-grid">
                   <div className="details-section">
                     <h4>■ 材料</h4>
@@ -124,13 +141,6 @@ function App() {
                     <pre>{recipe["工程"] || "データなし"}</pre>
                   </div>
                 </div>
-
-                {/* YouTubeリンクボタン */}
-                {recipe["URL"] && (
-                  <a href={recipe["URL"]} target="_blank" rel="noopener noreferrer" className="video-link">
-                    📺 YouTubeで動画を見る
-                  </a>
-                )}
               </div>
             </details>
           ))
@@ -140,6 +150,7 @@ function App() {
           </p>
         )}
       </div>
+      {/* --- ここまで差し替え --- */}
 
       <button onClick={() => fetchRecipes(false)} className="refresh-button">
         最新の情報に更新

@@ -71,3 +71,50 @@ pre {
   background-color: white;
   cursor: pointer;
 }
+
+.thumbnail-container {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto 15px auto;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.recipe-thumbnail {
+  width: 100%;
+  display: block;
+}
+
+.play-overlay {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(255, 0, 0, 0.85);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.creator-tag {
+  background-color: #f1f3f5;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  color: #495057;
+  margin-bottom: 10px;
+  display: inline-block;
+}
+
+.context-box {
+  background-color: #fff9db;
+  border-left: 4px solid #fab005;
+  padding: 10px;
+  margin-bottom: 15px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: #444;
+}
