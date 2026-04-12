@@ -5,7 +5,6 @@ import { Config } from './config';
 function App() {
   const CACHE_KEY = 'my_cooking_cache';
 
-  // 初期値：キャッシュ読み込みを安全に
   const [recipes, setRecipes] = useState(() => {
     try {
       const saved = localStorage.getItem(CACHE_KEY);
@@ -17,9 +16,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("すべて");
 
-  // 分類名のリストを修正
   const categories = ["すべて", "ヘルシー", "肉", "魚", "野菜", "スイーツ", "主食"];
-  // データ取得
+
   const fetchRecipes = useCallback(async (isSilent = false) => {
     try {
       if (recipes.length === 0 && !isSilent) setLoading(true);
@@ -30,8 +28,15 @@ function App() {
 
       const data = await response.json();
       if (Array.isArray(data)) {
-        setRecipes(data);
-        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        // --- データのズレを補正し、空文字を null 化する処理 ---
+        const cleanedData = data.map(r => ({
+          ...r,
+          "作成者": (r["作成者"] && r["作成者"].length > 10) ? null : r["作成者"], // 10文字以上の長い文は作成者ではないと判断
+          "コンテキスト": r["コンテキスト"] || (r["作成者"] && r["作成者"].length > 10 ? r["作成者"] : null)
+        }));
+
+        setRecipes(cleanedData);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cleanedData));
       }
     } catch (error) {
       console.error("API Fetch Error:", error);
@@ -44,32 +49,24 @@ function App() {
     fetchRecipes();
   }, [fetchRecipes]);
 
-  // useMemo 内のフィルタリングロジックも Python側と合わせる（またはAPIに任せる）
   const filteredRecipes = useMemo(() => {
     if (!recipes) return [];
     return recipes.filter(recipe => {
       const rCat = recipe["カテゴリ"] || "";
       const rName = recipe["料理名"] || "";
-
-      let categoryMatch = false;
-      if (selectedCategory === "すべて") {
-        categoryMatch = true;
-      } else if (selectedCategory === "スイーツ") {
-        // フロントエンド側でも「スイーツ」の中に「デザート」等を含める判定を入れる
+      let categoryMatch = selectedCategory === "すべて" || rCat.includes(selectedCategory);
+      if (selectedCategory === "スイーツ") {
         const targets = ["スイーツ", "デザート", "焼き菓子", "お菓子"];
         categoryMatch = targets.some(target => rCat.includes(target));
-      } else {
-        categoryMatch = rCat.includes(selectedCategory);
       }
-
       const searchMatch = searchQuery === "" || rName.toLowerCase().includes(searchQuery.toLowerCase());
       return categoryMatch && searchMatch;
     });
   }, [recipes, searchQuery, selectedCategory]);
 
-  return (
+return (
     <div className="container">
-      <h1>🍳 My Cooking Book</h1>
+      <h1>My Cooking Book</h1>
 
       <div className="search-controls">
         <input
@@ -88,7 +85,6 @@ function App() {
         </select>
       </div>
 
-{/* --- ここから差し替え --- */}
       <div className="recipe-list">
         {loading && filteredRecipes.length === 0 ? (
           <p style={{textAlign: "center"}}>読み込み中...</p>
@@ -97,11 +93,13 @@ function App() {
             <details key={index} className="recipe-card">
               <summary className="recipe-title">
                 <span className="recipe-name">{recipe["料理名"] || "名称未設定"}</span>
-                <span className="category">[{recipe["カテゴリ"] || "未分類"}]</span>
+                {recipe["カテゴリ"] && (
+                  <span className="category">[{recipe["カテゴリ"]}]</span>
+                )}
               </summary>
 
               <div className="recipe-content">
-                {/* 1. 【追加】サムネイル表示エリア */}
+                {/* 1. 動画 (Video_ID) */}
                 {recipe["Video_ID"] && (
                   <div className="thumbnail-container">
                     <a href={recipe["URL"]} target="_blank" rel="noopener noreferrer">
@@ -116,31 +114,46 @@ function App() {
                   </div>
                 )}
 
-                {/* 2. 【追加】作成者情報の表示 */}
-                {recipe["作成者"] && (
+                {/* 2. 材料と工程 */}
+                {(recipe["材料"] || recipe["工程"]) && (
+                  <div className="recipe-details-grid">
+                    {recipe["材料"] && (
+                      <div className="details-section">
+                        <h4>■ 材料</h4>
+                        <pre>{recipe["材料"]}</pre>
+                      </div>
+                    )}
+                    {recipe["工程"] && (
+                      <div className="details-section">
+                        <h4>■ 工程</h4>
+                        <pre>{recipe["工程"]}</pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. コツ (🍀 はここだけに使用) */}
+                {recipe["コツ"] && recipe["コツ"].trim() !== "" && (
+                  <div className="context-box tips-area">
+                    <strong>🍀 コツ:</strong>
+                    <p><em>{recipe["コツ"]}</em></p>
+                  </div>
+                )}
+
+                {/* 4. 作成者 (👩‍🍳 はここだけに使用) */}
+                {recipe["作成者"] && recipe["作成者"].trim() !== "" && (
                   <div className="creator-tag">
-                    👤 <strong>作成者:</strong> {recipe["作成者"]}
+                    👩‍🍳 <strong>作成者:</strong> {recipe["作成者"]}
                   </div>
                 )}
 
-                {/* 3. 【追加】コンテキスト（料理の背景）の表示 */}
-                {recipe["コンテキスト"] && (
-                  <div className="context-box">
-                    💡 <em>{recipe["コンテキスト"]}</em>
+                {/* 5. コンテキスト (背景・紹介文) */}
+                {recipe["コンテキスト"] && recipe["コンテキスト"].trim() !== "" && (
+                  <div className="context-box info-area">
+                    <strong>コンテキスト:</strong>
+                    <p>{recipe["コンテキスト"]}</p>
                   </div>
                 )}
-
-                {/* 4. 【既存】材料と工程のレイアウト */}
-                <div className="recipe-details-grid">
-                  <div className="details-section">
-                    <h4>■ 材料</h4>
-                    <pre>{recipe["材料"] || "データなし"}</pre>
-                  </div>
-                  <div className="details-section">
-                    <h4>■ 工程</h4>
-                    <pre>{recipe["工程"] || "データなし"}</pre>
-                  </div>
-                </div>
               </div>
             </details>
           ))
@@ -150,7 +163,6 @@ function App() {
           </p>
         )}
       </div>
-      {/* --- ここまで差し替え --- */}
 
       <button onClick={() => fetchRecipes(false)} className="refresh-button">
         最新の情報に更新
