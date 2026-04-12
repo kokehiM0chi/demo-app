@@ -18,7 +18,7 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState("すべて");
 
   // 分類名のリストを修正
-  const categories = ["すべて", "肉", "魚", "野菜", "スイーツ", "主食"];
+  const categories = ["すべて", "ヘルシー", "肉", "魚", "野菜", "スイーツ", "主食"];
   // データ取得
   const fetchRecipes = useCallback(async (isSilent = false) => {
     try {
@@ -95,14 +95,42 @@ function App() {
           filteredRecipes.map((recipe, index) => (
             <details key={index} className="recipe-card">
               <summary className="recipe-title">
-                {recipe["料理名"] || "名称未設定"}
+                <span className="recipe-name">{recipe["料理名"] || "名称未設定"}</span>
                 <span className="category">[{recipe["カテゴリ"] || "未分類"}]</span>
               </summary>
+
               <div className="recipe-content">
-                <h4>■ 材料</h4>
-                <pre>{recipe["材料"] || "データなし"}</pre>
-                <h4>■ 工程</h4>
-                <pre>{recipe["工程"] || "データなし"}</pre>
+                {/* 作成者情報の表示 */}
+                {recipe["作成者"] && (
+                  <div className="creator-tag">
+                    👤 <strong>作成者:</strong> {recipe["作成者"]}
+                  </div>
+                )}
+
+                {/* コンテキスト（料理の背景）の表示 */}
+                {recipe["コンテキスト"] && (
+                  <div className="context-box">
+                    💡 <em>{recipe["コンテキスト"]}</em>
+                  </div>
+                )}
+
+                <div className="recipe-details-grid">
+                  <div className="details-section">
+                    <h4>■ 材料</h4>
+                    <pre>{recipe["材料"] || "データなし"}</pre>
+                  </div>
+                  <div className="details-section">
+                    <h4>■ 工程</h4>
+                    <pre>{recipe["工程"] || "データなし"}</pre>
+                  </div>
+                </div>
+
+                {/* YouTubeリンクボタン */}
+                {recipe["URL"] && (
+                  <a href={recipe["URL"]} target="_blank" rel="noopener noreferrer" className="video-link">
+                    📺 YouTubeで動画を見る
+                  </a>
+                )}
               </div>
             </details>
           ))
