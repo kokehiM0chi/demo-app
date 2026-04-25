@@ -1,6 +1,11 @@
 import webbrowser
 from pathlib import Path
+import webbrowser
+from pathlib import Path
+# ここに追加（ファイル名が daniels_engine.py の場合）
 from daniels_engine import DanielsFormulaEngine
+# ※ DanielsFormulaEngine クラスは既存のものを使用してください
+# from daniels_engine import DanielsFormulaEngine
 
 PHASE_COLORS = {
     "Phase_I":   {"bg": "#f0f7ff", "text": "#0056b3", "label": "基礎構築"},
@@ -16,6 +21,15 @@ MENU_THEMES = {
 }
 
 def export_to_html(plan, paces, details_db, stats):
+    # 1. ナビゲーション部分
+    nav_html = """
+    <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
+        <a href="#" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #3182ce; padding: 8px 16px; background: #ebf8ff; border-radius: 6px 6px 0 0;">🏃 トレーニングプラン</a>
+        <a href="race_schedule.html" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px; transition: 0.3s;" onmouseover="this.style.color='#3182ce'" onmouseout="this.style.color='#718096'">📅 レース日程一覧 (開発中)</a>
+    </nav>
+    """
+
+    # 2. ペース表示部分
     pace_html = f"""
     <div class="pace-container" style="display: flex; gap: 10px; margin-bottom: 20px;">
         <div style="flex:1; background:#2c3e50; color:white; padding:12px; border-radius:8px; text-align:center;">
@@ -37,6 +51,7 @@ def export_to_html(plan, paces, details_db, stats):
     </div>
     """
 
+    # 3. テーブル行の生成
     rows = ""
     for w in plan:
         q_html = "".join([f"<div style='margin-bottom:3px;'>・<a href='#{m['id']}' style='color:inherit; font-weight:bold;'>{m['summary']}</a></div>" for m in w['menus']])
@@ -66,6 +81,7 @@ def export_to_html(plan, paces, details_db, stats):
             </td>
         </tr>"""
 
+    # 4. 詳細セクションの生成
     detail_html = "".join([f"""
     <div id="{qid}" style="margin-bottom:15px; padding:15px; border-radius:8px; background:#fff; border-left:6px solid {MENU_THEMES['Q']['color']}; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
         <h4 style="margin:0 0 10px 0; color:#2c3e50;">{qid}: {d['type']}</h4>
@@ -78,11 +94,21 @@ def export_to_html(plan, paces, details_db, stats):
         <div style="text-align:right; margin-top:8px;"><a href="#" style="font-size:0.75em; color:#3498db;">↑ スケジュールに戻る</a></div>
     </div>""" for qid, d in details_db.items()])
 
+    # 5. 最終的なHTML構築
     final_html = f"""
-    <html><head><meta charset="UTF-8"></head>
-    <body style="font-family:sans-serif; padding:30px; background:#f4f7f6; color:#333;">
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <title>Marathon Training & Race Dashboard</title>
+    </head>
+    <body style="font-family:'Helvetica Neue', Arial, sans-serif; padding:30px; background:#f4f7f6; color:#333;">
         <div style="max-width:1000px; margin:0 auto; background:white; padding:25px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1);">
+
+            {nav_html}
+
             {pace_html}
+
             <div style="background:#34495e; color:white; padding:15px; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;">
                 <h2 style="margin:0; font-size:1.4em;">Daniels 24-Week Plan (VDOT: {plan[0]['vdot']})</h2>
                 <div style="font-size:0.8em; background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:4px;">Weekly Mileage: {stats['weekly_mileage']}km</div>
@@ -102,7 +128,7 @@ def export_to_html(plan, paces, details_db, stats):
                 <div style="background:{MENU_THEMES['Q']['bg']}; border-top:4px solid {MENU_THEMES['Q']['color']}; padding:10px; font-size:0.8em; border-radius:0 0 4px 4px;">
                     <strong style="color:{MENU_THEMES['Q']['color']};">{MENU_THEMES['Q']['label']}</strong><br>
                     <strong>目的:</strong> 強度別の走力向上(T/I/R)<br>
-                    <strong>Note:</strong> 鮮度の高い脚で挑むことで、トレーニング効果を最大化させます。週末レースがない週はQ1・Q2・Q3を2日目・4日目・7日目に配置します。
+                    <strong>Note:</strong> 鮮度の高い脚で挑むことで、トレーニング効果を最大化させます。
                 </div>
             </div>
 
@@ -119,13 +145,64 @@ def export_to_html(plan, paces, details_db, stats):
             <h3 style="margin-top:40px; border-bottom:2px solid #34495e; padding-bottom:10px;">Qセッション詳細リファレンス</h3>
             {detail_html}
         </div>
-    </body></html>"""
+    </body>
+    </html>"""
 
+    # ファイル出力とブラウザ起動
     out = Path("daniels_detail_plan.html").absolute()
-    with open(out, "w", encoding="utf-8") as f: f.write(final_html)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(final_html)
     webbrowser.open(f"file://{out}")
+
+def export_race_schedule_html(races=[]):
+    """レース日程一覧ページ（空の状態）を生成する"""
+
+    # ナビゲーション（トレーニングプランへ戻るリンク）
+    nav_html = """
+    <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
+        <a href="daniels_detail_plan.html" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">🏃 トレーニングプラン</a>
+        <a href="#" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #e53e3e; padding: 8px 16px; background: #fff5f5; border-radius: 6px 6px 0 0;">📅 レース日程一覧</a>
+    </nav>
+    """
+
+    # レースデータが空の場合の表示
+    if not races:
+        content_html = """
+        <div style="text-align: center; padding: 50px; color: #a0aec0; border: 2px dashed #e2e8f0; border-radius: 12px;">
+            <p style="font-size: 1.2em;">現在エントリー済みのレースはありません</p>
+            <p style="font-size: 0.9em;">(Gmail / Yahooメールからの自動取得機能を実装予定)</p>
+        </div>
+        """
+    else:
+        # 今後データが入った時のためのループ処理（仮）
+        rows = "".join([f"<tr><td>{r['date']}</td><td>{r['name']}</td></tr>" for r in races])
+        content_html = f"<table>{rows}</table>"
+
+    final_html = f"""
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head><meta charset="UTF-8"><title>Race Schedule</title></head>
+    <body style="font-family:sans-serif; padding:30px; background:#f4f7f6; color:#333;">
+        <div style="max-width:1000px; margin:0 auto; background:white; padding:25px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1);">
+            {nav_html}
+            <h2 style="color: #2c3e50; margin-bottom: 20px;">エントリー済みレース一覧</h2>
+            {content_html}
+        </div>
+    </body>
+    </html>
+    """
+
+    out = Path("race_schedule.html").absolute()
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(final_html)
+
 
 if __name__ == "__main__":
     engine = DanielsFormulaEngine()
     plan, paces, details = engine.generate_plan(24)
+
+    # トレーニングプラン生成
     export_to_html(plan, paces, details, engine.stats)
+
+    # レース日程ページ生成（現在は空リスト）
+    export_race_schedule_html([])
