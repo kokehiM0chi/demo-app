@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from daniels_engine import DanielsFormulaEngine
+from typing import List, Optional
 
 app = FastAPI()
 JSON_PATH = Path("races.json")
@@ -27,23 +28,79 @@ class RaceEntry(BaseModel):
     date: str
     name: str
 
-def load_races():
+def load_races() -> List[dict]:
     if not JSON_PATH.exists(): return []
     with open(JSON_PATH, "r", encoding="utf-8") as f:
-        try: return json.load(f)
-        except: return []
+        try:
+            data = json.load(f)
+            # --- 重要：古いデータ（idがない）にIDを動的に付与してエラーを回避 ---
+            updated = False
+            for i, r in enumerate(data):
+                if "id" not in r:
+                    r["id"] = i
+                    updated = True
+            if updated:
+                save_races(data) # 形式を整えて保存し直す
+            return data
+        except (json.JSONDecodeError, TypeError):
+            return []
 
 def save_races(races):
     with open(JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(races, f, indent=4, ensure_ascii=False)
 
+
+from typing import List, Optional
+
+# データモデルにIDを追加
+class RaceEntry(BaseModel):
+    id: Optional[int] = None
+    date: str
+    name: str
+    url: str = ""
+
 # --- API ---
 @app.post("/api/races")
-async def add_race(race: RaceEntry):
+async def upsert_race(race: RaceEntry):
     races = load_races()
-    races.append({"date": race.date, "name": race.name, "status": "エントリー済", "source": "Web UI"})
+    # IDを確実に数値として扱う（JSからの文字列化対策）
+    target_id = int(race.id) if race.id is not None else None
+
+    if target_id is not None:
+        # 【更新モード】
+        found = False
+        for r in races:
+            if r.get("id") == target_id:
+                r.update({"date": race.date, "name": race.name, "url": race.url})
+                found = True
+                break
+        # もしID指定で更新対象が見つからなかった場合は新規として扱う（安全策）
+        if not found:
+            target_id = None
+
+    if target_id is None:
+        # 【新規登録モード】
+        new_id = max([r.get("id", -1) for r in races] + [-1]) + 1
+        races.append({
+            "id": new_id,
+            "date": race.date,
+            "name": race.name,
+            "url": race.url,
+            "status": "エントリー済",
+            "source": "Web UI"
+        })
+
     save_races(races)
     return {"status": "ok"}
+
+
+@app.delete("/api/races/{race_id}")
+async def delete_race(race_id: int):
+    races = load_races()
+    races = [r for r in races if r.get("id") != race_id]
+    save_races(races)
+    return {"status": "ok"}
+
 
 # --- 1. トレーニングプラン画面 (以前のリッチなレイアウトを復元) ---
 @app.get("/", response_class=HTMLResponse)
@@ -145,9 +202,13 @@ async def view_training_plan():
     """
 
 # --- 2. レース日程画面 (API連携あり) ---
+# --- 2. レース日程画面 (URL対応版) ---
+# --- 2. レース日程画面 (編集・削除・日時対応版) ---
 @app.get("/races", response_class=HTMLResponse)
 async def view_race_schedule():
     races = load_races()
+    # 日付順にソート
+    races.sort(key=lambda x: x['date'])
 
     nav_html = """
     <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
@@ -156,47 +217,86 @@ async def view_race_schedule():
     </nav>
     """
 
-    race_rows = "".join([f"""
+    race_rows = ""
+    for r in races:
+        display_name = f'<a href="{r.get("url")}" target="_blank" style="color: #3182ce; text-decoration: none; font-weight: bold;">{r["name"]} 🔗</a>' if r.get("url") else r["name"]
+        race_rows += f"""
         <tr style="border-bottom: 1px solid #eee;">
-            <td style="padding: 15px;">{r['date']}</td>
-            <td style="padding: 15px; font-weight: bold;">{r['name']}</td>
-            <td style="padding: 15px;"><span style="background: #ebf8ff; color: #3182ce; padding: 4px 10px; border-radius: 20px; font-size: 0.85em;">{r['status']}</span></td>
+            <td style="padding: 12px;">{r['date']}</td>
+            <td style="padding: 12px;">{display_name}</td>
+            <td style="padding: 12px; text-align: right;">
+                <button onclick='editRace({json.dumps(r)})' style="padding: 4px 8px; font-size: 0.8em; cursor:pointer;">編集</button>
+                <button onclick='deleteRace({r["id"]})' style="padding: 4px 8px; font-size: 0.8em; color: red; cursor:pointer;">削除</button>
+            </td>
         </tr>
-    """ for r in races])
+        """
 
     return f"""
     <!DOCTYPE html>
     <html>
-    <head><meta charset="UTF-8"><title>Race Schedule</title></head>
+    <head><meta charset="UTF-8"><title>Race Manager</title></head>
     <body style="font-family: sans-serif; padding: 30px; background: #f4f7f6;">
-        <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+        <div style="max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
             {nav_html}
-            <div style="background: #fff5f5; padding: 20px; border-radius: 12px; border: 1px solid #feb2b2; margin-bottom: 30px;">
-                <h3 style="margin-top:0; color:#c53030;">新規レース登録</h3>
-                <div style="display: flex; gap: 10px;">
-                    <input type="text" id="name" placeholder="大会名" style="flex:2; padding:10px; border:1px solid #ddd; border-radius:6px;">
-                    <input type="text" id="date" placeholder="2026/05/02" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:6px;">
-                    <button onclick="addRace()" style="padding:10px 20px; background:#e53e3e; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">追加保存</button>
+            <div id="form-container" style="background: #fdf2f2; padding: 20px; border-radius: 12px; border: 1px solid #feb2b2; margin-bottom: 30px;">
+                <h3 id="form-title" style="margin-top:0; color:#c53030;">新規レース登録</h3>
+                <input type="hidden" id="race-id">
+                <div style="display: grid; grid-template-columns: 2fr 1.5fr 2fr auto; gap: 10px; margin-bottom:10px;">
+                    <input type="text" id="name" placeholder="大会名" style="padding:10px; border:1px solid #ddd; border-radius:6px;">
+                    <input type="text" id="date" placeholder="2026/05/02 10:30" style="padding:10px; border:1px solid #ddd; border-radius:6px;">
+                    <input type="text" id="url" placeholder="エントリーURL" style="padding:10px; border:1px solid #ddd; border-radius:6px;">
+                    <button id="save-btn" onclick="saveRace()" style="padding:10px 20px; background:#e53e3e; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">保存</button>
                 </div>
+                <button id="cancel-btn" onclick="resetForm()" style="display:none; font-size:0.8em;">キャンセル</button>
             </div>
             <table style="width: 100%; border-collapse: collapse;">
                 <thead style="background: #f8fafc; text-align: left;">
-                    <tr><th style="padding: 15px;">日付</th><th style="padding: 15px;">大会名</th><th style="padding: 15px;">状態</th></tr>
+                    <tr><th style="padding: 12px;">日時</th><th style="padding: 12px;">大会名</th><th style="padding: 12px; text-align: right;">アクション</th></tr>
                 </thead>
                 <tbody>{race_rows if race_rows else '<tr><td colspan="3" style="text-align:center; padding:20px;">予定はありません</td></tr>'}</tbody>
             </table>
         </div>
         <script>
-            async function addRace() {{
+            async function saveRace() {{
+                const id = document.getElementById('race-id').value;
                 const name = document.getElementById('name').value;
                 const date = document.getElementById('date').value;
+                const url = document.getElementById('url').value;
                 if(!name || !date) return alert('入力してください');
-                const res = await fetch('/api/races', {{
+
+                await fetch('/api/races', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ name, date }})
+                    body: JSON.stringify({{ id: id ? parseInt(id) : null, name, date, url }})
                 }});
-                if(res.ok) location.reload();
+                location.reload();
+            }}
+
+            async function deleteRace(id) {{
+                if(!confirm('本当に削除しますか？')) return;
+                await fetch(`/api/races/${{id}}`, {{ method: 'DELETE' }});
+                location.reload();
+            }}
+
+            function editRace(race) {{
+                document.getElementById('form-title').innerText = "レース情報を編集";
+                document.getElementById('race-id').value = race.id;
+                document.getElementById('name').value = race.name;
+                document.getElementById('date').value = race.date;
+                document.getElementById('url').value = race.url || '';
+                document.getElementById('save-btn').innerText = "更新する";
+                document.getElementById('cancel-btn').style.display = "inline";
+                window.scrollTo(0, 0);
+            }}
+
+            function resetForm() {{
+                document.getElementById('form-title').innerText = "新規レース登録";
+                document.getElementById('race-id').value = '';
+                document.getElementById('name').value = '';
+                document.getElementById('date').value = '';
+                document.getElementById('url').value = '';
+                document.getElementById('save-btn').innerText = "保存";
+                document.getElementById('cancel-btn').style.display = "none";
             }}
         </script>
     </body>

@@ -3,24 +3,29 @@
         "date": "2026/05/30",
         "name": "赤羽トライアル",
         "status": "エントリー済",
-        "source": "Web Dashboard"
+        "source": "Web Dashboard",
+        "id": 0
     },
     {
         "date": "2026/05/02",
         "name": "MK ディスタンス（非公認）",
         "status": "エントリー済",
-        "source": "Web Dashboard"
+        "source": "Web Dashboard",
+        "id": 1,
+        "url": "https://team-mk.net/mkdc/wp-content/uploads/2016/03/20260502program.pdf"
     },
     {
         "date": "2026/6/6",
         "name": "OTT 3000m",
         "status": "エントリー済",
-        "source": "Web UI"
+        "source": "Web UI",
+        "id": 2
     },
     {
         "date": "2026/07/20",
         "name": "OTT 3000m",
         "status": "エントリー済",
-        "source": "Web UI"
+        "source": "Web UI",
+        "id": 3
     }
 ]
