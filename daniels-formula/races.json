@@ -1,0 +1,26 @@
+[
+    {
+        "date": "2026/05/30",
+        "name": "赤羽トライアル",
+        "status": "エントリー済",
+        "source": "Web Dashboard"
+    },
+    {
+        "date": "2026/05/02",
+        "name": "MK ディスタンス（非公認）",
+        "status": "エントリー済",
+        "source": "Web Dashboard"
+    },
+    {
+        "date": "2026/6/6",
+        "name": "OTT 3000m",
+        "status": "エントリー済",
+        "source": "Web UI"
+    },
+    {
+        "date": "2026/07/20",
+        "name": "OTT 3000m",
+        "status": "エントリー済",
+        "source": "Web UI"
+    }
+]
