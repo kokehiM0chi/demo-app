@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from daniels_engine import DanielsFormulaEngine
 from typing import List, Optional
+from datetime import datetime
 
 app = FastAPI()
 JSON_PATH = Path("races.json")
@@ -23,6 +24,110 @@ MENU_THEMES = {
     "L": {"color": "#0077b6", "bg": "#caf0f8", "label": "L (Long Run)"},
     "Q": {"color": "#e67e22", "bg": "#fef5e7", "label": "Q (Quality Sessions)"}
 }
+
+
+# --- 設定更新用のデータモデル ---
+class UserStats(BaseModel):
+    monthly_mileage: int
+    weekly_mileage: int
+    base_distance: str
+    base_time: str
+    # last_updated は自動付与するため Optional
+    last_updated: Optional[str] = None
+
+# --- API: 設定の保存 ---
+@app.post("/api/settings")
+async def save_settings(stats: UserStats):
+    engine = DanielsFormulaEngine()
+    new_data = stats.dict()
+    # 最終変更日付を自動入力
+    new_data["last_updated"] = datetime.now().strftime("%Y-%m-%d")
+
+    # ファイルに保存
+    with open(engine.base_path / "data/user_stats.json", "w", encoding="utf-8") as f:
+        json.dump(new_data, f, indent=4, ensure_ascii=False)
+
+    return {"status": "ok", "last_updated": new_data["last_updated"]}
+
+# --- 設定画面の表示 ---
+@app.get("/settings", response_class=HTMLResponse)
+async def view_settings():
+    engine = DanielsFormulaEngine()
+    stats = engine.stats
+
+    nav_html = """
+    <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
+        <a href="/" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">🏃 プラン</a>
+        <a href="/races" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">📅 レース日程</a>
+        <a href="/settings" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #48bb78; padding: 8px 16px; background: #f0fff4; border-radius: 6px 6px 0 0;">⚙️ ユーザー設定</a>
+    </nav>
+    """
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head><meta charset="UTF-8"><title>Settings</title></head>
+    <body style="font-family: sans-serif; padding: 30px; background: #f4f7f6;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            {nav_html}
+            <h2 style="color: #2f855a; margin-top: 0;">ユーザー設定の編集</h2>
+            <p style="font-size: 0.85em; color: #666;">最終更新日: <span id="display-last-updated">{stats.get('last_updated', '未設定')}</span></p>
+
+            <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
+                <label>
+                    <span style="display:block; font-weight:bold; margin-bottom:5px;">月間走行距離 (km)</span>
+                    <input type="number" id="monthly_mileage" value="{stats['monthly_mileage']}" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px;">
+                </label>
+                <label>
+                    <span style="display:block; font-weight:bold; margin-bottom:5px;">週間走行距離 (km)</span>
+                    <input type="number" id="weekly_mileage" value="{stats['weekly_mileage']}" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px;">
+                </label>
+                <label>
+                    <span style="display:block; font-weight:bold; margin-bottom:5px;">基準距離 (VDOT用)</span>
+                    <select id="base_distance" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px;">
+                        <option value="1.5km" {"selected" if stats['base_distance'] == "1.5km" else ""}>1.5km</option>
+                        <option value="5km" {"selected" if stats['base_distance'] == "5km" else ""}>5km</option>
+                        <option value="10km" {"selected" if stats['base_distance'] == "10km" else ""}>10km</option>
+                    </select>
+                </label>
+                <label>
+                    <span style="display:block; font-weight:bold; margin-bottom:5px;">基準タイム (hh:mm:ss または mm:ss)</span>
+                    <input type="text" id="base_time" value="{stats['base_time']}" placeholder="22:15" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px;">
+                </label>
+
+                <button onclick="saveSettings()" style="margin-top:10px; padding:15px; background:#48bb78; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; font-size:1em;">
+                    設定を保存して再計算
+                </button>
+            </div>
+        </div>
+
+        <script>
+            async function saveSettings() {{
+                const data = {{
+                    monthly_mileage: parseInt(document.getElementById('monthly_mileage').value),
+                    weekly_mileage: parseInt(document.getElementById('weekly_mileage').value),
+                    base_distance: document.getElementById('base_distance').value,
+                    base_time: document.getElementById('base_time').value
+                }};
+
+                const res = await fetch('/api/settings', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify(data)
+                }});
+
+                if (res.ok) {{
+                    const result = await res.json();
+                    alert('設定を保存しました。プランを再計算します。');
+                    location.href = "/"; // トップに戻って再計算されたプランを確認
+                }} else {{
+                    alert('保存に失敗しました。タイムの形式などを確認してください。');
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
 
 class RaceEntry(BaseModel):
     date: str
@@ -50,7 +155,6 @@ def save_races(races):
         json.dump(races, f, indent=4, ensure_ascii=False)
 
 
-from typing import List, Optional
 
 # データモデルにIDを追加
 class RaceEntry(BaseModel):
@@ -111,8 +215,9 @@ async def view_training_plan():
 
     nav_html = """
     <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
-        <a href="/" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #3182ce; padding: 8px 16px; background: #ebf8ff; border-radius: 6px 6px 0 0;">🏃 トレーニングプラン</a>
-        <a href="/races" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px; transition: 0.3s;">📅 レース日程一覧</a>
+        <a href="/" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #3182ce; padding: 8px 16px; background: #ebf8ff; border-radius: 6px 6px 0 0;">🏃 プラン</a>
+        <a href="/races" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">📅 レース日程</a>
+        <a href="/settings" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">⚙️ 設定</a>
     </nav>
     """
 
@@ -234,8 +339,9 @@ async def view_race_schedule():
 
     nav_html = """
     <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
-        <a href="/" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">🏃 トレーニングプラン</a>
-        <a href="/races" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #e53e3e; padding: 8px 16px; background: #fff5f5; border-radius: 6px 6px 0 0;">📅 レース日程一覧</a>
+        <a href="/" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">🏃 プラン</a>
+        <a href="/races" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #e53e3e; padding: 8px 16px; background: #fff5f5; border-radius: 6px 6px 0 0;">📅 レース日程</a>
+        <a href="/settings" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">⚙️ 設定</a>
     </nav>
     """
 
