@@ -174,13 +174,35 @@ async def view_training_plan():
         </div>
     </div>""" for qid, d in details_db.items()])
 
+    # 2. 【ダニエルズ理論に基づく5つの強度解説】
+    # 変数名を intensity_summary_html に統一し、クォートのミスを修正
+    intensity_summary_html = """
+    <div style="display: flex; gap: 8px; margin-bottom: 25px; font-size: 0.72em; line-height: 1.3;">
+        <div style="flex:1; padding:10px; background:#d8f3dc; border-radius:6px; border-top:3px solid #1b4332; color:#1b4332;">
+            <strong>E (Easy)</strong><br>心筋の発達・毛細血管の増加・怪我への耐性構築。
+        </div>
+        <div style="flex:1; padding:10px; background:#ebf8ff; border-radius:6px; border-top:3px solid #3182ce; color:#2c5282;">
+            <strong>M (Marathon)</strong><br>マラソン特有の生理的適応。目標ペースでの脚作りとエネルギー消費効率の確認。
+        </div>
+        <div style="flex:1; padding:10px; background:#fff9f0; border-radius:6px; border-top:3px solid #9a6300; color:#9a6300;">
+            <strong>T (Threshold)</strong><br>乳酸閾値の向上。血中の乳酸を再利用・除去する能力を高める。
+        </div>
+        <div style="flex:1; padding:10px; background:#fff5f5; border-radius:6px; border-top:3px solid #b91c1c; color:#b91c1c;">
+            <strong>I (Interval)</strong><br>VO2maxの向上。有酸素能力の限界値を引き上げる。
+        </div>
+        <div style="flex:1; padding:10px; background:#faf5ff; border-radius:6px; border-top:3px solid #6b21a8; color:#6b21a8;">
+            <strong>R (Repetition)</strong><br>無酸素性作業能とランニング効率（経済性）の向上。
+        </div>
+    </div>
+    """
+
     return f"""
     <!DOCTYPE html>
     <html lang="ja">
     <head><meta charset="UTF-8"><title>Marathon Training Dashboard</title></head>
     <body style="font-family:'Helvetica Neue', Arial, sans-serif; padding:30px; background:#f4f7f6; color:#333;">
         <div style="max-width:1000px; margin:0 auto; background:white; padding:25px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1);">
-            {nav_html} {pace_html}
+            {nav_html} {pace_html} {intensity_summary_html}
             <div style="background:#34495e; color:white; padding:15px; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;">
                 <h2 style="margin:0; font-size:1.4em;">Daniels 24-Week Plan (VDOT: {plan[0]['vdot']})</h2>
                 <div style="font-size:0.8em; background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:4px;">Weekly Mileage: {stats['weekly_mileage']}km</div>
