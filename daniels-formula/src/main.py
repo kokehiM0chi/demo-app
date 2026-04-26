@@ -35,6 +35,52 @@ class UserStats(BaseModel):
     # last_updated は自動付与するため Optional
     last_updated: Optional[str] = None
 
+# --- 共通ナビゲーション生成関数 ---
+def get_nav_html(active_page: str):
+    # メニュー項目の定義（ここを一箇所変えれば全部変わる！）
+    menu_items = [
+        {"id": "plan", "href": "/", "label": "🏃 プラン"},
+        {"id": "races", "href": "/races", "label": "📅 レース日程"},
+        {"id": "profile", "href": "/settings", "label": "👤 Running Profile"},
+    ]
+
+    links = []
+    for item in menu_items:
+        # アクティブなページかどうかの判定
+        is_active = item["id"] == active_page
+
+        # デザインの変数化
+        color = "#2d3748" if is_active else "#718096"
+        bg = "transparent"
+        border_bottom = "none"
+
+        if is_active:
+            if item["id"] == "plan":
+                bg, border_bottom = "#ebf8ff", "3px solid #3182ce"
+            elif item["id"] == "races":
+                bg, border_bottom = "#fff5f5", "3px solid #e53e3e"
+            elif item["id"] == "profile":
+                bg, border_bottom = "#f0fff4", "3px solid #48bb78"
+
+        style = f"""
+            text-decoration: none;
+            color: {color};
+            font-weight: bold;
+            padding: 8px 16px;
+            background: {bg};
+            border-bottom: {border_bottom};
+            border-radius: 6px 6px 0 0;
+            transition: 0.3s;
+        """
+        links.append(f'<a href="{item["href"]}" style="{style}">{item["label"]}</a>')
+
+    return f"""
+    <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
+        {"".join(links)}
+    </nav>
+    """
+
+
 # --- API: 設定の保存 ---
 @app.post("/api/settings")
 async def save_settings(stats: UserStats):
@@ -55,13 +101,7 @@ async def view_settings():
     engine = DanielsFormulaEngine()
     stats = engine.stats
 
-    nav_html = """
-    <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
-        <a href="/" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">🏃 プラン</a>
-        <a href="/races" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">📅 レース日程</a>
-        <a href="/settings" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #48bb78; padding: 8px 16px; background: #f0fff4; border-radius: 6px 6px 0 0;">⚙️ ユーザー設定</a>
-    </nav>
-    """
+    nav_html = get_nav_html("profile") # 「profile」をアクティブにする
 
     return f"""
     <!DOCTYPE html>
@@ -213,13 +253,7 @@ async def view_training_plan():
     plan, paces, details_db = engine.generate_plan(24)
     stats = engine.stats
 
-    nav_html = """
-    <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
-        <a href="/" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #3182ce; padding: 8px 16px; background: #ebf8ff; border-radius: 6px 6px 0 0;">🏃 プラン</a>
-        <a href="/races" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">📅 レース日程</a>
-        <a href="/settings" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">⚙️ 設定</a>
-    </nav>
-    """
+    nav_html = get_nav_html("plan")  # 「plan」をアクティブにする
 
     pace_html = f"""
     <div style="display: flex; gap: 10px; margin-bottom: 20px;">
@@ -337,13 +371,7 @@ async def view_race_schedule():
     # 日付順にソート
     races.sort(key=lambda x: x['date'])
 
-    nav_html = """
-    <nav style="margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 2px solid #edf2f7; padding-bottom: 15px;">
-        <a href="/" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">🏃 プラン</a>
-        <a href="/races" style="text-decoration: none; color: #2d3748; font-weight: bold; border-bottom: 3px solid #e53e3e; padding: 8px 16px; background: #fff5f5; border-radius: 6px 6px 0 0;">📅 レース日程</a>
-        <a href="/settings" style="text-decoration: none; color: #718096; font-weight: bold; padding: 8px 16px;">⚙️ 設定</a>
-    </nav>
-    """
+    nav_html = get_nav_html("races") # 「races」をアクティブにする
 
     race_rows = ""
     for r in races:
