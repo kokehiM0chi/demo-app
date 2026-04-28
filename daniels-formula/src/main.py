@@ -60,7 +60,7 @@ def get_nav_html(active_page: str):
             if item["id"] == "plan":
                 bg, border_bottom = "#ebf8ff", "3px solid #3182ce"
             elif item["id"] == "races":
-                bg, border_bottom = "#fff5f5", "3px solid #e53e3e"
+                bg, border_bottom = "#fff5f5", "3px solid #32CD32"
             elif item["id"] == "analysis":
                 bg, border_bottom = "#fefcbf", "3px solid #ecc94b" # 黄色系
             elif item["id"] == "profile":
@@ -265,11 +265,11 @@ async def view_analysis():
                     </div>
                 </div>
 
-                <div style="background: #fff; padding: 15px; border-radius: 8px; border-left: 5px solid #e53e3e; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 30px;">
-                    <h4 style="margin:0 0 10px 0; color: #e53e3e;">TSB (Training Stress Balance)</h4>
+                <div style="background: #fff; padding: 15px; border-radius: 8px; border-left: 5px solid #32CD32; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 30px;">
+                    <h4 style="margin:0 0 10px 0; color: #32CD32;">TSB (Training Stress Balance)</h4>
                     <p style="font-size: 0.85em; color: #4a5568; line-height: 1.5;">
                         <strong>「今のコンディション（余力）」</strong>です。<br>
-                        長期的な体力から直近の疲労を引いた値です。<strong>マイナス20以下</strong>になると怪我のリスクが高まる「危険信号」です。赤点線が沈み込んでいる時は、積極的な休息が必要です。
+                        長期的な体力から直近の疲労を引いた値です。<strong>マイナス20以下</strong>になると怪我のリスクが高まる「危険信号」です。緑点線が沈み込んでいる時は、積極的な休息が必要です。
                     </p>
                 </div>
 
@@ -312,8 +312,8 @@ async def view_analysis():
                             {{
                                 label: 'TSB (コンディション)',
                                 data: {json.dumps(tsb_data)},
-                                borderColor: '#e53e3e',
-                                backgroundColor: '#e53e3e',
+                                borderColor: '#32CD32',
+                                backgroundColor: '#32CD32',
                                 borderDash: [5, 5],
                                 fill: false,
                                 yAxisID: 'y',
@@ -570,7 +570,7 @@ async def view_race_schedule():
                     <input type="text" id="name" placeholder="大会名" style="padding:10px; border:1px solid #ddd; border-radius:6px;">
                     <input type="text" id="date" placeholder="2026/05/02 10:30" style="padding:10px; border:1px solid #ddd; border-radius:6px;">
                     <input type="text" id="url" placeholder="エントリーURL" style="padding:10px; border:1px solid #ddd; border-radius:6px;">
-                    <button id="save-btn" onclick="saveRace()" style="padding:10px 20px; background:#e53e3e; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">保存</button>
+                    <button id="save-btn" onclick="saveRace()" style="padding:10px 20px; background:#32CD32; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">保存</button>
                 </div>
                 <button id="cancel-btn" onclick="resetForm()" style="display:none; font-size:0.8em;">キャンセル</button>
             </div>
