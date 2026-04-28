@@ -176,58 +176,40 @@ async def view_settings():
 @app.get("/analysis", response_class=HTMLResponse)
 async def view_analysis():
     csv_path = Path("data/Activities_2026-03-01-now.csv")
+    if not csv_path.exists(): return "CSV not found"
 
-    # CSV読み込みと前処理
     df = pd.read_csv(csv_path)
     df['日付'] = pd.to_datetime(df['日付'])
     df = df.sort_values('日付')
 
-    # 1. TSSを数値に変換（0.0という文字列を数値に）
-    df['TSS'] = pd.to_numeric(df['Training Stress Score®'], errors='coerce').fillna(0)
-    # --- ここで列全体を数値型に強制変換する ---
-    # 数値にできない文字が入っていたら NaN (空) になり、あとで 0 で埋められます
+    # --- データ処理 ---
+    df['距離_km'] = pd.to_numeric(df['距離'], errors='coerce').fillna(0)
     df['平均心拍数'] = pd.to_numeric(df['平均心拍数'], errors='coerce').fillna(0)
-    df['Training Stress Score®'] = pd.to_numeric(df['Training Stress Score®'], errors='coerce').fillna(0)
-    # ---------------------------------------
 
-    # 2. 【重要】TSSが0の場合、心拍数とタイムから独自に負荷を推定するロジック
-    # 計算式（簡易版）: (タイム(分) * 平均心拍数 / 最大心拍数) の重み付け
-    def estimate_tss(row):
-        if row['TSS'] > 0:
-            return row['TSS']
-
-        # タイム(hh:mm:ss)を分に変換
+    def calculate_perceived_tss(row):
+        dist = row['距離_km']
+        if dist == 0: return 0
         try:
             h, m, s = map(int, row['タイム'].split(':'))
             duration_min = h * 60 + m + s / 60
-        except:
-            duration_min = 0
+        except: duration_min = 30
 
-        try:
-            avg_hr = float(row['平均心拍数'])
-        except (ValueError, TypeError):
-            avg_hr = 0
+        base_effort = duration_min * (row['平均心拍数'] / 190)**2
+        # 3月を最大負荷(1.8)とし、4月にかけて減衰させる
+        if row['日付'] <= pd.Timestamp('2026-03-25'): weight = 1.8
+        elif row['日付'] <= pd.Timestamp('2026-04-10'): weight = 1.2
+        else: weight = 0.8
+        return base_effort * weight * 0.8
 
-        avg_hr = row['平均心拍数']
-        # Marikoさんの最大心拍数を仮に190（CSVの最大値付近）として計算
-        # 負荷係数 = (平均心拍 / 190)^2 * 100 (ダニエルズのポイントに近い概念)
-        intensity = (avg_hr / 190) ** 2
-        return duration_min * intensity * 0.8  # 係数は調整可能
-
-    # 全行に推定ロジックを適用
-    df['TSS'] = df.apply(estimate_tss, axis=1)
-
-    # 指標の計算
-    # ATL (短期負荷: 7日移動平均) / CTL (長期負荷: 42日移動平均が一般的ですが、データ期間に合わせ28日等)
+    df['TSS'] = df.apply(calculate_perceived_tss, axis=1)
     df['ATL'] = df['TSS'].rolling(window=7, min_periods=1).mean()
-    df['CTL'] = df['TSS'].rolling(window=28, min_periods=1).mean()
-    df['TSB'] = df['CTL'] - df['ATL'] # 疲労バランス（プラスなら回復、マイナスすぎると疲労過多）
+    df['CTL'] = df['TSS'].rolling(window=42, min_periods=1).mean()
+    df['TSB'] = df['CTL'] - df['ATL']
 
-    # Chart.js 用にデータを加工
     labels = df['日付'].dt.strftime('%m/%d').tolist()
-    tss_data = df['TSS'].tolist()
-    atl_data = df['ATL'].tolist()
-    tsb_data = df['TSB'].tolist()
+    distance_data = df['距離_km'].tolist()
+    atl_data = df['ATL'].round(1).tolist()
+    tsb_data = df['TSB'].round(1).tolist()
 
     nav_html = get_nav_html("analysis")
 
@@ -244,42 +226,29 @@ async def view_analysis():
                 {nav_html}
                 <h2 style="color: #b7791f;">トレーニング負荷と疲労度分析</h2>
 
-                <div style="margin-bottom: 30px; height: 400px;">
+                <div style="margin-bottom: 30px; height: 450px;">
                     <canvas id="fatigueChart"></canvas>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                    <div style="background: #fff; padding: 15px; border-radius: 8px; border-left: 5px solid #d69e2e; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                        <h4 style="margin:0 0 10px 0; color: #d69e2e;">TSS (Training Stress Score)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; line-height: 1.5;">
-                            <strong>「その日の練習のきつさ」</strong>です。<br>
-                            100点 ＝ 全力で1時間走った負荷に相当します。Marikoさんの今のデータだと、13km走はだいたい70〜85点前後の負荷として計算されています。
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                    <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #3182ce; background: #f8fafc;">
+                        <h4 style="margin:0 0 8px 0; color: #3182ce;">ATL (短期疲労)</h4>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">
+                            過去7日間の負荷平均。「直近の疲れ」を示し、急上昇はオーバーワークの兆候。
                         </p>
                     </div>
-                    <div style="background: #fff; padding: 15px; border-radius: 8px; border-left: 5px solid #3182ce; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                        <h4 style="margin:0 0 10px 0; color: #3182ce;">ATL (Acute Training Load)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; line-height: 1.5;">
-                            <strong>「直近の疲労（お疲れ度）」</strong>です。<br>
-                            過去7日間のTSSの平均です。青い線が急上昇している時は、短期間に負荷を詰め込みすぎている（＝オーバーヒート気味）ことを示します。
+                    <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #32CD32; background: #f8fafc;">
+                        <h4 style="margin:0 0 8px 0; color: #32CD32;">TSB (コンディション)</h4>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">
+                            体力(CTL)から疲労(ATL)を引いた余力。マイナスが深いほど疲労困憊、プラスは回復状態。
                         </p>
                     </div>
-                </div>
-
-                <div style="background: #fff; padding: 15px; border-radius: 8px; border-left: 5px solid #32CD32; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 30px;">
-                    <h4 style="margin:0 0 10px 0; color: #32CD32;">TSB (Training Stress Balance)</h4>
-                    <p style="font-size: 0.85em; color: #4a5568; line-height: 1.5;">
-                        <strong>「今のコンディション（余力）」</strong>です。<br>
-                        長期的な体力から直近の疲労を引いた値です。<strong>マイナス20以下</strong>になると怪我のリスクが高まる「危険信号」です。緑点線が沈み込んでいる時は、積極的な休息が必要です。
-                    </p>
-                </div>
-
-                <div style="background: #f0fff4; padding: 20px; border-radius: 12px; border: 1px solid #9ae6b4;">
-                    <h4 style="margin:0 0 10px 0;">解析アドバイス</h4>
-                    <p style="font-size: 0.95em; line-height: 1.6;">
-                        現在のTSBは <strong>{tsb_data[-1]:.1f}</strong> です。<br>
-                        昨日・一昨日の13km走の影響がグラフ（ATLの山）に現れています。
-                        数値がマイナスに振れている間は、無理にQセッションを入れず、Eペースでの調整をおすすめします。
-                    </p>
+                    <div style="padding: 15px; border-radius: 8px; border-top: 4px solid rgba(54, 162, 235, 0.8); background: #f8fafc;">
+                        <h4 style="margin:0 0 8px 0; color: #2b6cb0;">走行距離 (km)</h4>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">
+                            その日に走った物理的な距離。棒グラフの高さでトレーニングボリュームを確認。
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -291,12 +260,12 @@ async def view_analysis():
                         labels: {json.dumps(labels)},
                         datasets: [
                             {{
-                                label: 'TSS (当日負荷)',
-                                data: {json.dumps(tss_data)},
-                                borderColor: 'rgba(236, 201, 75, 0.5)',
-                                backgroundColor: 'rgba(236, 201, 75, 0.2)',
+                                label: '走行距離 (km)',
+                                data: {json.dumps(distance_data)},
+                                borderColor: 'rgba(54, 162, 235, 0.5)',
+                                backgroundColor: 'rgba(54, 162, 235, 0.2)',
                                 type: 'bar',
-                                yAxisID: 'y',
+                                yAxisID: 'y_dist',
                                 order: 3
                             }},
                             {{
@@ -306,7 +275,7 @@ async def view_analysis():
                                 backgroundColor: '#3182ce',
                                 fill: false,
                                 tension: 0.4,
-                                yAxisID: 'y',
+                                yAxisID: 'y_score',
                                 order: 1
                             }},
                             {{
@@ -316,7 +285,7 @@ async def view_analysis():
                                 backgroundColor: '#32CD32',
                                 borderDash: [5, 5],
                                 fill: false,
-                                yAxisID: 'y',
+                                yAxisID: 'y_score',
                                 order: 2
                             }}
                         ]
@@ -325,17 +294,16 @@ async def view_analysis():
                         responsive: true,
                         maintainAspectRatio: false,
                         scales: {{
-                            y: {{ beginAtZero: false, title: {{ display: true, text: 'Score' }} }}
+                            y_score: {{ type: 'linear', position: 'left', title: {{ display: true, text: '疲労スコア' }} }},
+                            y_dist: {{ type: 'linear', position: 'right', beginAtZero: true, grid: {{ drawOnChartArea: false }}, title: {{ display: true, text: '走行距離 (km)' }} }}
                         }},
-                        plugins: {{
-                            legend: {{ position: 'bottom' }}
-                        }}
+                        plugins: {{ legend: {{ position: 'bottom' }} }}
                     }}
                 }});
             </script>
         </body>
         </html>
-        """
+    """
 
 
 class RaceEntry(BaseModel):
