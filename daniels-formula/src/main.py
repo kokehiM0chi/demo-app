@@ -8,6 +8,7 @@ from daniels_engine import DanielsFormulaEngine
 from typing import List, Optional
 from datetime import datetime
 import pandas as pd
+from fastapi import Body # インポートを確認
 
 app = FastAPI()
 JSON_PATH = Path("races.json")
@@ -173,13 +174,35 @@ async def view_settings():
     </html>
     """
 
-import json
-import pandas as pd
-from pathlib import Path
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
 
-app = FastAPI()
+@app.post("/api/save_memo")
+async def save_memo_to_csv(data: dict = Body(...)):
+    date_label = data.get("date")  # "mm/dd" 形式
+    new_memo = data.get("memo")
+
+    csv_path = Path("data/Activities_2026-03-01-now.csv")
+    if not csv_path.exists():
+        return {"status": "error", "message": "CSV not found"}
+
+    df = pd.read_csv(csv_path)
+    df['日付'] = pd.to_datetime(df['日付'])
+
+    # 2026年の日付として照合（CSVのデータが2026年想定）
+    try:
+        target_date = pd.to_datetime(f"2026/{date_label}").date()
+    except:
+        return {"status": "error", "message": "Invalid date format"}
+
+    if 'メモ' not in df.columns:
+        df['メモ'] = ""
+
+    mask = df['日付'].dt.date == target_date
+    if mask.any():
+        df.loc[mask, 'メモ'] = new_memo
+        df.to_csv(csv_path, index=False, encoding='utf-8')
+        return {"status": "success"}
+    else:
+        return {"status": "error", "message": "Date not found"}
 
 @app.get("/analysis", response_class=HTMLResponse)
 async def view_analysis():
@@ -388,17 +411,25 @@ async def view_analysis():
                     const newMemo = document.getElementById('memoInput').value;
                     const date = labels[currentEditIndex];
 
-                    // ここでサーバー側のAPIを叩く
-                    // 今回はフロント側のみの反映例
-                    memos[currentEditIndex] = newMemo;
-                    chart.update();
-                    closeModal();
+                    try {{
+                        const response = await fetch('/api/save_memo', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{ date: date, memo: newMemo }})
+                        }});
 
-                    // 実際には以下のようなAPI呼び出しが必要です
-                    // await fetch('/api/save_memo', {{
-                    //     method: 'POST',
-                    //     body: JSON.stringify({{ date, memo: newMemo }})
-                    // }});
+                        const result = await response.json();
+                        if (result.status === "success") {{
+                            memos[currentEditIndex] = newMemo;
+                            chart.update();
+                            closeModal();
+                        }} else {{
+                            alert("保存に失敗しました: " + result.message);
+                        }}
+                    }} catch (e) {{
+                        console.error("Save error:", e);
+                        alert("サーバーとの通信に失敗しました");
+                    }}
                 }}
             </script>
         </body>
