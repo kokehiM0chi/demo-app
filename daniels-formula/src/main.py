@@ -173,12 +173,24 @@ async def view_settings():
     </html>
     """
 
+import json
+import pandas as pd
+from pathlib import Path
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+
+app = FastAPI()
+
 @app.get("/analysis", response_class=HTMLResponse)
 async def view_analysis():
     csv_path = Path("data/Activities_2026-03-01-now.csv")
     if not csv_path.exists(): return "CSV not found"
 
+    # CSV読み込み（'メモ'列があることを想定。なければ空文字で作成）
     df = pd.read_csv(csv_path)
+    if 'メモ' not in df.columns:
+        df['メモ'] = ""
+
     df['日付'] = pd.to_datetime(df['日付'])
     df = df.sort_values('日付')
 
@@ -188,34 +200,23 @@ async def view_analysis():
     def get_pace_seconds(row):
         try:
             t_str = str(row['タイム']).strip().lower()
-            if not t_str or t_str in ['nan', 'none', '0', '0:00', '00:00']: return None
-
-            # コロンで分割
+            if not t_str or t_str in ['nan', 'none', '0', '0:00']: return None
             parts = t_str.split(':')
-            if len(parts) == 3: # HH:MM:SS
-                total_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-            elif len(parts) == 2: # MM:SS
-                total_seconds = int(parts[0]) * 60 + int(parts[1])
-            else: # 秒数のみ
-                total_seconds = int(float(parts[0]))
-
-            dist = float(row['距離'])
-            if dist <= 0 or total_seconds <= 0: return None
-            return total_seconds / dist
+            if len(parts) == 3: sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
+            elif len(parts) == 2: sec = int(parts[0])*60 + int(parts[1])
+            else: sec = int(float(parts[0]))
+            return sec / float(row['距離']) if float(row['距離']) > 0 else None
         except: return None
 
     df['pace_sec'] = df.apply(get_pace_seconds, axis=1)
     df['pace_min_float'] = df['pace_sec'] / 60
 
-    # 強力な体感負荷補正
+    # 体感負荷補正
     def calculate_perceived_tss(row):
         dist = row['距離_km']
         if dist <= 0: return 0
-        p_sec = row['pace_sec'] if row['pace_sec'] and row['pace_sec'] > 0 else 360
-
-        if row['日付'] <= pd.Timestamp('2026-03-25'): weight = 1.8
-        elif row['日付'] <= pd.Timestamp('2026-04-10'): weight = 1.2
-        else: weight = 0.8
+        p_sec = row['pace_sec'] if row['pace_sec'] else 360
+        weight = 1.8 if row['日付'] <= pd.Timestamp('2026-03-25') else (1.2 if row['日付'] <= pd.Timestamp('2026-04-10') else 0.8)
         return (dist * (360 / p_sec)) * weight * 5
 
     df['TSS'] = df.apply(calculate_perceived_tss, axis=1)
@@ -223,149 +224,182 @@ async def view_analysis():
     df['CTL'] = df['TSS'].rolling(window=42, min_periods=1).mean()
     df['TSB'] = df['CTL'] - df['ATL']
 
-    # --- JS用データ変換 (Noneを明示的にnullへ) ---
+    # --- JS用データ変換 ---
     labels = df['日付'].dt.strftime('%m/%d').tolist()
     distance_data = df['距離_km'].tolist()
-    # NaNをJSのnullに変換
-    pace_min_float_data = [round(m, 2) if (pd.notnull(m) and m > 0) else None for m in df['pace_min_float'].tolist()]
+    pace_data = [round(m, 2) if (pd.notnull(m) and m > 0) else None for m in df['pace_min_float'].tolist()]
     atl_data = df['ATL'].round(1).tolist()
     tsb_data = df['TSB'].round(1).tolist()
-
-    nav_html = get_nav_html("analysis")
+    memo_data = df['メモ'].fillna("").tolist() # メモ列をリスト化
 
     return f"""
         <!DOCTYPE html>
         <html lang="ja">
         <head>
             <meta charset="UTF-8">
-            <title>Fatigue Analysis</title>
+            <title>Fatigue Analysis with Notes</title>
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <style>
+                body {{ font-family: sans-serif; padding: 30px; background: #f4f7f6; }}
+                .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; }}
+                /* モーダル（編集画面）のスタイル */
+                #editModal {{
+                    display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
+                    background-color: rgba(0,0,0,0.4);
+                }}
+                .modal-content {{
+                    background-color: white; margin: 10% auto; padding: 20px; border-radius: 12px; width: 400px;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+                }}
+                textarea {{ width: 100%; height: 100px; margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; }}
+                .btn-group {{ margin-top: 15px; text-align: right; }}
+                .save-btn {{ background: #3182ce; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }}
+            </style>
         </head>
-        <body style="font-family: sans-serif; padding: 30px; background: #f4f7f6;">
-            <div style="max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                {nav_html}
-                <h2 style="color: #b7791f;">トレーニング負荷と疲労度分析</h2>
+        <body>
+            <div class="container">
+                <h2 style="color: #b7791f;">トレーニング分析 & デイリーメモ</h2>
+                <div style="height: 500px;"><canvas id="fatigueChart"></canvas></div>
 
-                <div style="margin-bottom: 30px; height: 550px;">
-                    <canvas id="fatigueChart"></canvas>
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 20px;">
                     <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #3182ce; background: #f8fafc;">
                         <h4 style="margin:0 0 8px 0; color: #3182ce;">ATL (短期疲労)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">直近7日間の負荷トレンドです。</p>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">直近7日間の負荷。</p>
                     </div>
                     <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #32CD32; background: #f8fafc;">
                         <h4 style="margin:0 0 8px 0; color: #32CD32;">TSB (コンディション)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">余力を示します。3月の底が実感を反映するように調整しています。</p>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">余力。グラフの点をクリックするとメモを編集できます。</p>
                     </div>
                     <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #e53e3e; background: #f8fafc;">
                         <h4 style="margin:0 0 8px 0; color: #e53e3e;">平均ペース</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">左第2軸を参照。上が速いペース（○分△秒/km）です。</p>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">▲をホバーするとメモが表示されます。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="editModal">
+                <div class="modal-content">
+                    <h3 id="modalDate" style="margin-top:0;"></h3>
+                    <p style="font-size: 0.9em; color: #666;">この日の振り返り・反省点:</p>
+                    <textarea id="memoInput"></textarea>
+                    <div class="btn-group">
+                        <button onclick="closeModal()" style="background: #eee; border:none; padding:8px 12px; border-radius:6px; margin-right:8px;">キャンセル</button>
+                        <button class="save-btn" onclick="saveMemo()">保存</button>
                     </div>
                 </div>
             </div>
 
             <script>
+                const labels = {json.dumps(labels)};
+                const memos = {json.dumps(memo_data)};
+                let currentEditIndex = null;
+
                 const ctx = document.getElementById('fatigueChart').getContext('2d');
-                new Chart(ctx, {{
+                const chart = new Chart(ctx, {{
                     type: 'line',
                     data: {{
-                        labels: {json.dumps(labels)},
+                        labels: labels,
                         datasets: [
                             {{
                                 label: '平均ペース (min/km)',
-                                data: {json.dumps(pace_min_float_data)},
+                                data: {json.dumps(pace_data)},
                                 borderColor: '#e53e3e',
                                 backgroundColor: '#e53e3e',
-                                type: 'line',
-                                showLine: false,
-                                pointStyle: 'triangle',
-                                pointRadius: 8,
-                                spanGaps: false, // データがない箇所は描画しない
-                                yAxisID: 'y_pace',
-                                order: 1
+                                type: 'line', showLine: false, pointStyle: 'triangle', pointRadius: 9,
+                                yAxisID: 'y_pace', order: 1
                             }},
                             {{
                                 label: 'ATL (短期疲労)',
                                 data: {json.dumps(atl_data)},
-                                borderColor: '#3182ce',
-                                borderWidth: 2,
-                                fill: false,
-                                tension: 0.3,
-                                yAxisID: 'y_score',
-                                order: 2
+                                borderColor: '#3182ce', borderWidth: 2, fill: false, tension: 0.3,
+                                yAxisID: 'y_score', order: 2
                             }},
                             {{
                                 label: 'TSB (コンディション)',
                                 data: {json.dumps(tsb_data)},
-                                borderColor: '#32CD32',
-                                borderDash: [5, 5],
-                                fill: false,
-                                yAxisID: 'y_score',
-                                order: 3
+                                borderColor: '#32CD32', borderDash: [5, 5], fill: false,
+                                yAxisID: 'y_score', order: 3
                             }},
                             {{
                                 label: '走行距離 (km)',
                                 data: {json.dumps(distance_data)},
                                 backgroundColor: 'rgba(54, 162, 235, 0.12)',
-                                type: 'bar',
-                                yAxisID: 'y_dist',
-                                order: 4
+                                type: 'bar', yAxisID: 'y_dist', order: 4
                             }}
                         ]
                     }},
                     options: {{
                         responsive: true,
                         maintainAspectRatio: false,
-                        scales: {{
-                            y_score: {{
-                                type: 'linear', position: 'left',
-                                title: {{ display: true, text: '疲労スコア' }}
-                            }},
-                            y_pace: {{
-                                type: 'linear', position: 'left',
-                                reverse: true,
-                                min: 4, // 表示範囲を適切に制限（例: 4分〜10分）
-                                max: 10,
-                                title: {{ display: true, text: 'ペース (min/km)' }},
-                                grid: {{ drawOnChartArea: false }},
-                                ticks: {{
-                                    callback: function(value) {{
-                                        let m = Math.floor(value);
-                                        let s = Math.round((value - m) * 60);
-                                        if (s === 60) {{ m++; s = 0; }}
-                                        return m + ":" + (s < 10 ? "0" : "") + s;
-                                    }}
-                                }}
-                            }},
-                            y_dist: {{
-                                type: 'linear', position: 'right',
-                                beginAtZero: true,
-                                title: {{ display: true, text: '走行距離 (km)' }},
-                                grid: {{ drawOnChartArea: false }}
+                        onClick: (e, elements) => {{
+                            if (elements.length > 0) {{
+                                const index = elements[0].index;
+                                openModal(index);
                             }}
+                        }},
+                        scales: {{
+                            y_score: {{ type: 'linear', position: 'left', title: {{ display: true, text: 'スコア' }} }},
+                            y_pace: {{
+                                type: 'linear', position: 'left', reverse: true, min: 4, max: 10,
+                                title: {{ display: true, text: 'ペース' }},
+                                grid: {{ drawOnChartArea: false }},
+                                ticks: {{ callback: v => {{ let m=Math.floor(v), s=Math.round((v-m)*60); return m+":"+(s<10?"0":"")+s; }} }}
+                            }},
+                            y_dist: {{ type: 'linear', position: 'right', beginAtZero: true, grid: {{ drawOnChartArea: false }} }}
                         }},
                         plugins: {{
                             tooltip: {{
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                bodyFont: {{ size: 14 }},
                                 callbacks: {{
+                                    afterBody: function(items) {{
+                                        const index = items[0].dataIndex;
+                                        const memo = memos[index];
+                                        return memo ? '\\n【メモ】\\n' + memo : '';
+                                    }},
                                     label: function(context) {{
                                         let label = context.dataset.label || '';
-                                        let val = context.parsed.y;
-                                        if (label === '平均ペース (min/km)') {{
-                                            if (val === null || val === 0) return label + ': データなし';
-                                            let m = Math.floor(val);
-                                            let s = Math.round((val - m) * 60);
-                                            if (s === 60) {{ m++; s = 0; }}
-                                            return label + ': ' + m + '分' + (s < 10 ? '0' : '') + s + '秒/km';
+                                        if (label.includes('ペース')) {{
+                                            let v = context.parsed.y;
+                                            let m=Math.floor(v), s=Math.round((v-m)*60);
+                                            return label + ': ' + m + '分' + (s<10?'0':'') + s + '秒/km';
                                         }}
-                                        return label + ': ' + val;
+                                        return label + ': ' + context.parsed.y;
                                     }}
                                 }}
                             }}
                         }}
                     }}
                 }});
+
+                function openModal(index) {{
+                    currentEditIndex = index;
+                    document.getElementById('modalDate').innerText = labels[index] + " の振り返り";
+                    document.getElementById('memoInput').value = memos[index];
+                    document.getElementById('editModal').style.display = 'block';
+                }}
+
+                function closeModal() {{
+                    document.getElementById('editModal').style.display = 'none';
+                }}
+
+                async function saveMemo() {{
+                    const newMemo = document.getElementById('memoInput').value;
+                    const date = labels[currentEditIndex];
+
+                    // ここでサーバー側のAPIを叩く
+                    // 今回はフロント側のみの反映例
+                    memos[currentEditIndex] = newMemo;
+                    chart.update();
+                    closeModal();
+
+                    // 実際には以下のようなAPI呼び出しが必要です
+                    // await fetch('/api/save_memo', {{
+                    //     method: 'POST',
+                    //     body: JSON.stringify({{ date, memo: newMemo }})
+                    // }});
+                }}
             </script>
         </body>
         </html>
