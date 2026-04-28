@@ -184,30 +184,50 @@ async def view_analysis():
 
     # --- データ処理 ---
     df['距離_km'] = pd.to_numeric(df['距離'], errors='coerce').fillna(0)
-    df['平均心拍数'] = pd.to_numeric(df['平均心拍数'], errors='coerce').fillna(0)
 
+    def get_pace_seconds(row):
+        try:
+            t_str = str(row['タイム']).strip().lower()
+            if not t_str or t_str in ['nan', 'none', '0', '0:00', '00:00']: return None
+
+            # コロンで分割
+            parts = t_str.split(':')
+            if len(parts) == 3: # HH:MM:SS
+                total_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+            elif len(parts) == 2: # MM:SS
+                total_seconds = int(parts[0]) * 60 + int(parts[1])
+            else: # 秒数のみ
+                total_seconds = int(float(parts[0]))
+
+            dist = float(row['距離'])
+            if dist <= 0 or total_seconds <= 0: return None
+            return total_seconds / dist
+        except: return None
+
+    df['pace_sec'] = df.apply(get_pace_seconds, axis=1)
+    df['pace_min_float'] = df['pace_sec'] / 60
+
+    # 強力な体感負荷補正
     def calculate_perceived_tss(row):
         dist = row['距離_km']
-        if dist == 0: return 0
-        try:
-            h, m, s = map(int, row['タイム'].split(':'))
-            duration_min = h * 60 + m + s / 60
-        except: duration_min = 30
+        if dist <= 0: return 0
+        p_sec = row['pace_sec'] if row['pace_sec'] and row['pace_sec'] > 0 else 360
 
-        base_effort = duration_min * (row['平均心拍数'] / 190)**2
-        # 3月を最大負荷(1.8)とし、4月にかけて減衰させる
         if row['日付'] <= pd.Timestamp('2026-03-25'): weight = 1.8
         elif row['日付'] <= pd.Timestamp('2026-04-10'): weight = 1.2
         else: weight = 0.8
-        return base_effort * weight * 0.8
+        return (dist * (360 / p_sec)) * weight * 5
 
     df['TSS'] = df.apply(calculate_perceived_tss, axis=1)
     df['ATL'] = df['TSS'].rolling(window=7, min_periods=1).mean()
     df['CTL'] = df['TSS'].rolling(window=42, min_periods=1).mean()
     df['TSB'] = df['CTL'] - df['ATL']
 
+    # --- JS用データ変換 (Noneを明示的にnullへ) ---
     labels = df['日付'].dt.strftime('%m/%d').tolist()
     distance_data = df['距離_km'].tolist()
+    # NaNをJSのnullに変換
+    pace_min_float_data = [round(m, 2) if (pd.notnull(m) and m > 0) else None for m in df['pace_min_float'].tolist()]
     atl_data = df['ATL'].round(1).tolist()
     tsb_data = df['TSB'].round(1).tolist()
 
@@ -222,32 +242,26 @@ async def view_analysis():
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         </head>
         <body style="font-family: sans-serif; padding: 30px; background: #f4f7f6;">
-            <div style="max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            <div style="max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                 {nav_html}
                 <h2 style="color: #b7791f;">トレーニング負荷と疲労度分析</h2>
 
-                <div style="margin-bottom: 30px; height: 450px;">
+                <div style="margin-bottom: 30px; height: 550px;">
                     <canvas id="fatigueChart"></canvas>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
                     <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #3182ce; background: #f8fafc;">
                         <h4 style="margin:0 0 8px 0; color: #3182ce;">ATL (短期疲労)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">
-                            過去7日間の負荷平均。「直近の疲れ」を示し、急上昇はオーバーワークの兆候。
-                        </p>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">直近7日間の負荷トレンドです。</p>
                     </div>
                     <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #32CD32; background: #f8fafc;">
                         <h4 style="margin:0 0 8px 0; color: #32CD32;">TSB (コンディション)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">
-                            体力(CTL)から疲労(ATL)を引いた余力。マイナスが深いほど疲労困憊、プラスは回復状態。
-                        </p>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">余力を示します。3月の底が実感を反映するように調整しています。</p>
                     </div>
-                    <div style="padding: 15px; border-radius: 8px; border-top: 4px solid rgba(54, 162, 235, 0.8); background: #f8fafc;">
-                        <h4 style="margin:0 0 8px 0; color: #2b6cb0;">走行距離 (km)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">
-                            その日に走った物理的な距離。棒グラフの高さでトレーニングボリュームを確認。
-                        </p>
+                    <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #e53e3e; background: #f8fafc;">
+                        <h4 style="margin:0 0 8px 0; color: #e53e3e;">平均ペース</h4>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">左第2軸を参照。上が速いペース（○分△秒/km）です。</p>
                     </div>
                 </div>
             </div>
@@ -260,33 +274,44 @@ async def view_analysis():
                         labels: {json.dumps(labels)},
                         datasets: [
                             {{
-                                label: '走行距離 (km)',
-                                data: {json.dumps(distance_data)},
-                                borderColor: 'rgba(54, 162, 235, 0.5)',
-                                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                                type: 'bar',
-                                yAxisID: 'y_dist',
-                                order: 3
+                                label: '平均ペース (min/km)',
+                                data: {json.dumps(pace_min_float_data)},
+                                borderColor: '#e53e3e',
+                                backgroundColor: '#e53e3e',
+                                type: 'line',
+                                showLine: false,
+                                pointStyle: 'triangle',
+                                pointRadius: 8,
+                                spanGaps: false, // データがない箇所は描画しない
+                                yAxisID: 'y_pace',
+                                order: 1
                             }},
                             {{
                                 label: 'ATL (短期疲労)',
                                 data: {json.dumps(atl_data)},
                                 borderColor: '#3182ce',
-                                backgroundColor: '#3182ce',
+                                borderWidth: 2,
                                 fill: false,
-                                tension: 0.4,
+                                tension: 0.3,
                                 yAxisID: 'y_score',
-                                order: 1
+                                order: 2
                             }},
                             {{
                                 label: 'TSB (コンディション)',
                                 data: {json.dumps(tsb_data)},
                                 borderColor: '#32CD32',
-                                backgroundColor: '#32CD32',
                                 borderDash: [5, 5],
                                 fill: false,
                                 yAxisID: 'y_score',
-                                order: 2
+                                order: 3
+                            }},
+                            {{
+                                label: '走行距離 (km)',
+                                data: {json.dumps(distance_data)},
+                                backgroundColor: 'rgba(54, 162, 235, 0.12)',
+                                type: 'bar',
+                                yAxisID: 'y_dist',
+                                order: 4
                             }}
                         ]
                     }},
@@ -294,10 +319,51 @@ async def view_analysis():
                         responsive: true,
                         maintainAspectRatio: false,
                         scales: {{
-                            y_score: {{ type: 'linear', position: 'left', title: {{ display: true, text: '疲労スコア' }} }},
-                            y_dist: {{ type: 'linear', position: 'right', beginAtZero: true, grid: {{ drawOnChartArea: false }}, title: {{ display: true, text: '走行距離 (km)' }} }}
+                            y_score: {{
+                                type: 'linear', position: 'left',
+                                title: {{ display: true, text: '疲労スコア' }}
+                            }},
+                            y_pace: {{
+                                type: 'linear', position: 'left',
+                                reverse: true,
+                                min: 4, // 表示範囲を適切に制限（例: 4分〜10分）
+                                max: 10,
+                                title: {{ display: true, text: 'ペース (min/km)' }},
+                                grid: {{ drawOnChartArea: false }},
+                                ticks: {{
+                                    callback: function(value) {{
+                                        let m = Math.floor(value);
+                                        let s = Math.round((value - m) * 60);
+                                        if (s === 60) {{ m++; s = 0; }}
+                                        return m + ":" + (s < 10 ? "0" : "") + s;
+                                    }}
+                                }}
+                            }},
+                            y_dist: {{
+                                type: 'linear', position: 'right',
+                                beginAtZero: true,
+                                title: {{ display: true, text: '走行距離 (km)' }},
+                                grid: {{ drawOnChartArea: false }}
+                            }}
                         }},
-                        plugins: {{ legend: {{ position: 'bottom' }} }}
+                        plugins: {{
+                            tooltip: {{
+                                callbacks: {{
+                                    label: function(context) {{
+                                        let label = context.dataset.label || '';
+                                        let val = context.parsed.y;
+                                        if (label === '平均ペース (min/km)') {{
+                                            if (val === null || val === 0) return label + ': データなし';
+                                            let m = Math.floor(val);
+                                            let s = Math.round((val - m) * 60);
+                                            if (s === 60) {{ m++; s = 0; }}
+                                            return label + ': ' + m + '分' + (s < 10 ? '0' : '') + s + '秒/km';
+                                        }}
+                                        return label + ': ' + val;
+                                    }}
+                                }}
+                            }}
+                        }}
                     }}
                 }});
             </script>
