@@ -1,7 +1,7 @@
 import json
 
 # 1. JSON形式のファイルを読み込む
-with open('hoge.json', 'r', encoding='utf-8') as f:
+with open('runtrip_course_route_38864.json', 'r', encoding='utf-8') as f:
     data = json.load(f)
     gpx_content = data['gpx']
 
