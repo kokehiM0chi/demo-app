@@ -286,12 +286,12 @@ async def view_analysis():
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 20px;">
                     <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #3182ce; background: #f8fafc;">
-                        <h4 style="margin:0 0 8px 0; color: #3182ce;">ATL (短期疲労)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">直近7日間の負荷。</p>
+                        <h4 style="margin:0 0 8px 0; color: #3182ce;">短期疲労度</h4>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">直近7日間のトレーニング負荷の平均。高いほど疲労が溜まっている状態。</p>
                     </div>
                     <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #32CD32; background: #f8fafc;">
-                        <h4 style="margin:0 0 8px 0; color: #32CD32;">TSB (コンディション)</h4>
-                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">余力。グラフの点をクリックするとメモを編集できます。</p>
+                        <h4 style="margin:0 0 8px 0; color: #32CD32;">コンディション度</h4>
+                        <p style="font-size: 0.85em; color: #4a5568; margin:0;">長期適応と短期疲労の差。正の値は回復中、負の値は疲労中。グラフの点をクリックするとメモを編集できます。</p>
                     </div>
                     <div style="padding: 15px; border-radius: 8px; border-top: 4px solid #e53e3e; background: #f8fafc;">
                         <h4 style="margin:0 0 8px 0; color: #e53e3e;">平均ペース</h4>
@@ -332,13 +332,13 @@ async def view_analysis():
                                 yAxisID: 'y_pace', order: 1
                             }},
                             {{
-                                label: 'ATL (短期疲労)',
+                                label: '短期疲労度',
                                 data: {json.dumps(atl_data)},
                                 borderColor: '#3182ce', borderWidth: 2, fill: false, tension: 0.3,
                                 yAxisID: 'y_score', order: 2
                             }},
                             {{
-                                label: 'TSB (コンディション)',
+                                label: 'コンディション度',
                                 data: {json.dumps(tsb_data)},
                                 borderColor: '#32CD32', borderDash: [5, 5], fill: false,
                                 yAxisID: 'y_score', order: 3
@@ -361,7 +361,7 @@ async def view_analysis():
                             }}
                         }},
                         scales: {{
-                            y_score: {{ type: 'linear', position: 'left', title: {{ display: true, text: 'スコア' }} }},
+                            y_score: {{ type: 'linear', position: 'left', title: {{ display: true, text: '疲労度スコア' }} }},
                             y_pace: {{
                                 type: 'linear', position: 'left', reverse: true, min: 4, max: 10,
                                 title: {{ display: true, text: 'ペース' }},
