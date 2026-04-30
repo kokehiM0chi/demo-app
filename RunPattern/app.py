@@ -16,7 +16,12 @@ WEEKDAYS_JP = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 def get_latest_csv():
     if not os.path.exists(DATA_DIR): return None
-    csv_files = glob.glob(os.path.join(DATA_DIR, "*.csv"))
+    # "Activities" で始まるCSVファイルだけを取得するように変更
+    csv_files = glob.glob(os.path.join(DATA_DIR, "Activities*.csv"))
+
+    if not csv_files:
+        print(f"❌ {DATA_DIR} 内に 'Activities' で始まるCSVが見つかりません。")
+        return None
     return max(csv_files, key=os.path.getmtime) if csv_files else None
 
 def load_and_clean_data(file_path):
@@ -25,8 +30,14 @@ def load_and_clean_data(file_path):
     except:
         df = pd.read_csv(file_path, encoding='cp932')
     df.columns = df.columns.str.strip()
+
+    # デバッグ用にこれを入れてみてください
+    print("--- 認識されている列名一覧 ---")
+    print(df.columns.tolist())
+    print("---------------------------")
+
     df['日付'] = pd.to_datetime(df['日付']).dt.normalize()
-    
+
     def time_to_seconds(t_str):
         if pd.isna(t_str) or t_str == '--' or t_str == '': return None
         try:
@@ -35,7 +46,7 @@ def load_and_clean_data(file_path):
             elif len(parts) == 2: return parts[0] * 60 + parts[1]
         except: return None
         return None
-    
+
     df['タイム秒'] = df['タイム'].apply(time_to_seconds)
     df['距離'] = pd.to_numeric(df['距離'].astype(str).str.replace(',', ''), errors='coerce')
     df['ペース秒'] = df['タイム秒'] / df['距離']
@@ -57,20 +68,20 @@ def analyze_best_patterns(df, target_sec, window):
         target_date = row['日付']
         target_dow = WEEKDAYS_JP[target_date.weekday()]
         start_date = target_date - timedelta(days=window)
-        
+
         pre_period = df[(df['日付'] >= start_date) & (df['日付'] < target_date)]
         all_days = pd.date_range(start=start_date, periods=window, freq='D')
-        
+
         daily_summary = pre_period.groupby('日付').agg({'距離': 'sum', 'タイム秒': 'sum'})
         daily_summary['平均ペース'] = daily_summary['タイム秒'] / daily_summary['距離']
-        
+
         daily_data = daily_summary.reindex(all_days)
-        
+
         # --- CSVデータの作成 ---
         csv_data = daily_data.copy()
         csv_data.index.name = 'Date'
         csv_data['Day'] = [WEEKDAYS_JP[d.weekday()] for d in all_days]
-        
+
         # 秒数を「分:秒」または「時:分:秒」に変換する関数
         def format_time(total_seconds):
             if pd.isna(total_seconds) or total_seconds == 0: return ""
@@ -88,7 +99,7 @@ def analyze_best_patterns(df, target_sec, window):
         # ファイル名の生成
         clean_time = str(row['タイム']).replace(':', 'm') + 's'
         base_name = f"{target_date.date()}_{clean_time}"
-        
+
         # 1. CSV保存 (列の順番を指定: Day, Distance, Time, Pace)
         csv_path = os.path.join(OUTPUT_DIR, f"{base_name}.csv")
         csv_data[['Day', 'Distance(km)', 'Time', 'Pace']].to_csv(csv_path, encoding='utf-8-sig')
@@ -99,7 +110,7 @@ def analyze_best_patterns(df, target_sec, window):
 
         plt.figure(figsize=(15, 7))
         x_labels = [f"{d.strftime('%m/%d')}\n({WEEKDAYS_JP[d.weekday()]})" for d in all_days]
-        
+
         colors = []
         for p in pace_vals:
             if pd.isna(p) or p == 0: colors.append('#f1f2f6')
@@ -113,11 +124,11 @@ def analyze_best_patterns(df, target_sec, window):
         plt.title(f"Target: {row['タイム']} ({row['距離']}km) on {target_date.date()} ({target_dow})", fontsize=15, fontweight='bold')
         plt.ylabel("Distance (km)")
         plt.tight_layout()
-        
+
         png_path = os.path.join(OUTPUT_DIR, f"{base_name}.png")
         plt.savefig(png_path)
         plt.close()
-        
+
         print(f"💾 保存完了: {base_name} (.png & .csv)")
 
 if __name__ == "__main__":
